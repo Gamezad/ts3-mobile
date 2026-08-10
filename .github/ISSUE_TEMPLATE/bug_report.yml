@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible problem in TS3 Mobile.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove server addresses, passwords, identity material, and participant data before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+      placeholder: 0.9.0-m8 or a commit SHA
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: Device model, Android version
+    validations:
+      required: true
+  - type: dropdown
+    id: audio_route
+    attributes:
+      label: Audio route
+      options:
+        - Not audio-related
+        - Speaker
+        - Earpiece
+        - Wired headset
+        - Bluetooth
+        - USB
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Connect to a test server
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Paste only logs that contain no credentials or private server/user data.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed credentials, server addresses, identities, and participant data.
+          required: true
+        - label: This is not a security vulnerability; security reports follow SECURITY.md.
+          required: true
