@@ -379,7 +379,7 @@ class Ts3jSessionClient : Ts3SessionClient {
         }
 
         override fun onTextMessage(event: TextMessageEvent) {
-            if (!isTokenActive(token)) return
+            if (token != generation.get()) return
             val targetMode = event.getMap()["targetmode"]?.toIntOrNull() ?: 1
             val target = when (targetMode) {
                 3 -> ChatMessage.Target.SERVER
