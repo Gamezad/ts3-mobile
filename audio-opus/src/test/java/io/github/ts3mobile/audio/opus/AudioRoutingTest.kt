@@ -6,8 +6,8 @@ import org.junit.Test
 class AudioRoutingTest {
     private val routes = listOf(
         AudioRoutingState.SystemRoute,
-        AudioRouteOption(7, AudioRouteKind.SPEAKER, "扬声器"),
-        AudioRouteOption(12, AudioRouteKind.BLUETOOTH, "蓝牙设备"),
+        AudioRouteOption(7, AudioRouteKind.SPEAKER, "Speaker"),
+        AudioRouteOption(12, AudioRouteKind.BLUETOOTH, "Bluetooth device"),
     )
 
     @Test

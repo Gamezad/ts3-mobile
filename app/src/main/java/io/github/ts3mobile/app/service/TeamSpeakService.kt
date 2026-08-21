@@ -267,7 +267,7 @@ class TeamSpeakService : Service() {
                     status = if (reconnecting) {
                         ConnectionStatus(
                             ConnectionPhase.RECONNECTING,
-                            "重连失败：${status.detail.orEmpty()}".trimEnd('：'),
+                            "Reconnect failed: ${status.detail.orEmpty()}".trimEnd(':'),
                             retryable = status.retryable,
                         )
                     } else {
@@ -414,7 +414,8 @@ class TeamSpeakService : Service() {
     private fun launchReconnect(cause: ConnectionStatus, epoch: Long) {
         if (!isEpochActive(epoch) || userDisconnectRequested) return
         val detail = if (networkAvailable.value) {
-            "连接中断，准备自动重连：${cause.detail.orEmpty()}".trimEnd('：')
+            "Connection lost, reconnecting automatically: ${cause.detail.orEmpty()}"
+                .trimEnd(':')
         } else {
             WAITING_FOR_NETWORK_DETAIL
         }
@@ -467,7 +468,7 @@ class TeamSpeakService : Service() {
                 current.copy(
                     status = ConnectionStatus(
                         ConnectionPhase.RECONNECTING,
-                        "${delayMs / 1_000} 秒后进行第 $attempt 次重连",
+                        "Reconnect attempt $attempt in ${delayMs / 1_000}s",
                         retryable = true,
                     ),
                 )
@@ -482,7 +483,7 @@ class TeamSpeakService : Service() {
                 current.copy(
                     status = ConnectionStatus(
                         ConnectionPhase.RECONNECTING,
-                        "正在进行第 $attempt 次重连",
+                        "Reconnect attempt $attempt in progress",
                         retryable = true,
                     ),
                 )
@@ -550,8 +551,9 @@ class TeamSpeakService : Service() {
         serviceScope.launch {
             try {
                 sessionMutex.withLock {
-                    check(isListenerActive(listener) && listener.connected) { "连接已失效" }
-                    session?.joinChannel(target.id, target.password) ?: error("连接已失效")
+                    check(isListenerActive(listener) && listener.connected) { "Connection is no longer active" }
+                    session?.joinChannel(target.id, target.password)
+                        ?: error("Connection is no longer active")
                 }
                 mutableState.update {
                     it.copy(switchingChannelId = null, channelError = null)
@@ -561,7 +563,7 @@ class TeamSpeakService : Service() {
                     mutableState.update {
                         it.copy(
                             switchingChannelId = null,
-                            channelError = "恢复频道失败：${error.conciseMessage()}",
+                            channelError = "Failed to restore channel: ${error.conciseMessage()}",
                         )
                     }
                 }
@@ -591,7 +593,7 @@ class TeamSpeakService : Service() {
                     listener,
                     ConnectionStatus(
                         ConnectionPhase.DISCONNECTED,
-                        "网络连接已断开",
+                        "Network connection lost",
                         retryable = true,
                     ),
                 )
@@ -656,7 +658,7 @@ class TeamSpeakService : Service() {
             !hasMicrophonePermission()
         ) {
             mutableState.update {
-                it.copy(microphoneError = "需要麦克风权限才能开启常开模式")
+                it.copy(microphoneError = "Microphone permission is required for continuous mode")
             }
             return
         }
@@ -692,7 +694,7 @@ class TeamSpeakService : Service() {
                     mutableState.update {
                         it.copy(
                             isTransmitting = false,
-                            microphoneError = "没有麦克风权限",
+                            microphoneError = "Microphone permission denied",
                         )
                     }
                     return@withLock
@@ -904,10 +906,10 @@ class TeamSpeakService : Service() {
             try {
                 sessionMutex.withLock {
                     check(mutableState.value.status.phase == ConnectionPhase.CONNECTED) {
-                        "当前未连接到服务器"
+                        "Not connected to a server"
                     }
                     session?.joinChannel(channelId, password)
-                        ?: error("当前未连接到服务器")
+                        ?: error("Not connected to a server")
                 }
                 lastChannel = ChannelTarget(channelId, password)
                 mutableState.update { state ->
@@ -917,7 +919,7 @@ class TeamSpeakService : Service() {
                 mutableState.update { state ->
                     state.copy(
                         switchingChannelId = null,
-                        channelError = "切换频道失败：${error.conciseMessage()}",
+                        channelError = "Failed to switch channel: ${error.conciseMessage()}",
                     )
                 }
             }
@@ -966,7 +968,7 @@ class TeamSpeakService : Service() {
             mutableState.update {
                 it.copy(
                     isTransmitting = false,
-                    microphoneError = "需要麦克风权限才能发送语音",
+                    microphoneError = "Microphone permission is required to send voice",
                 )
             }
         }
@@ -996,7 +998,8 @@ class TeamSpeakService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "ts3_connection"
         private const val NOTIFICATION_ID = 4103
         private const val STABLE_CONNECTION_MS = 30_000L
-        private const val WAITING_FOR_NETWORK_DETAIL = "网络不可用，恢复后自动重连"
+        private const val WAITING_FOR_NETWORK_DETAIL =
+            "Network unavailable; will reconnect automatically when it returns"
         private const val MAX_PARTICIPANT_VOLUME_PERCENT = 200
         private val foregroundPhases = setOf(
             ConnectionPhase.CONNECTING,

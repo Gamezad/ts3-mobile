@@ -1,6 +1,5 @@
 package io.github.ts3mobile.protocol
 
-import com.github.manevolent.ts3j.command.CommandException
 import com.github.manevolent.ts3j.audio.Microphone
 import com.github.manevolent.ts3j.event.ChannelCreateEvent
 import com.github.manevolent.ts3j.event.ChannelDeletedEvent
@@ -19,7 +18,6 @@ import com.github.manevolent.ts3j.protocol.packet.PacketBody1VoiceWhisper
 import com.github.manevolent.ts3j.protocol.PacketKind
 import com.github.manevolent.ts3j.protocol.socket.client.LocalTeamspeakClientSocket
 import java.io.IOException
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
@@ -61,6 +59,14 @@ class Ts3jSessionClient : Ts3SessionClient {
         client.setIdentity(identity)
         client.setNickname(normalized.nickname)
         client.setHWID(identity.uid.toBase64())
+        // Advertise a real, supported TeamSpeak 3 client release. The library
+        // ships a placeholder ("3.?.?") that modern servers reject during the
+        // handshake, which previously manifested as a connection timeout.
+        client.setClientVersion(
+            CLIENT_PLATFORM,
+            CLIENT_VERSION_STRING,
+            CLIENT_VERSION_SIGN,
+        )
         client.setMicrophone(voiceSource?.toMicrophone())
         client.setExceptionHandler { error ->
             if (token == generation.get()) {
@@ -93,12 +99,21 @@ class Ts3jSessionClient : Ts3SessionClient {
         client.addListener(createListener(client, token))
 
         try {
-            val address = InetSocketAddress(
-                InetAddress.getByName(normalized.host),
-                normalized.port,
-            )
-            logDiagnostic("connecting to ${address.address.hostAddress}:${address.port}")
-            client.connect(address, normalized.password.takeIf(String::isNotBlank), CONNECT_TIMEOUT_MS)
+            // Prefer ts3j's hostname-based connect so it can resolve _ts3._udp
+            // SRV records (and TSDNS-style hosts). That overload hard-codes
+            // port 9987, so for non-default ports resolve the address here and
+            // connect directly.
+            val password = normalized.password.takeIf(String::isNotBlank)
+            if (normalized.port == DEFAULT_TEAMSPEAK_PORT) {
+                logDiagnostic("connecting to ${normalized.host}:$DEFAULT_TEAMSPEAK_PORT")
+                client.connect(normalized.host, password, CONNECT_TIMEOUT_MS)
+            } else {
+                val address = InetSocketAddress(normalized.host, normalized.port)
+                logDiagnostic(
+                    "connecting to ${address.address?.hostAddress ?: normalized.host}:${address.port}",
+                )
+                client.connect(address, password, CONNECT_TIMEOUT_MS)
+            }
             if (token != generation.get()) {
                 runCatching { client.close() }
                 if (socket === client) socket = null
@@ -106,7 +121,10 @@ class Ts3jSessionClient : Ts3SessionClient {
             }
             try {
                 client.subscribeAll()
-            } catch (error: CommandException) {
+            } catch (error: Exception) {
+                // Some servers restrict channel subscriptions; without it the
+                // client is still connected, so log and continue rather than
+                // treating the session as failed.
                 logDiagnostic("event subscriptions unavailable: ${error.conciseMessage()}")
             }
             if (token != generation.get()) {
@@ -401,8 +419,18 @@ class Ts3jSessionClient : Ts3SessionClient {
     }
 
     private companion object {
-        const val CONNECT_TIMEOUT_MS = 10_000L
+        const val CONNECT_TIMEOUT_MS = 30_000L
+        const val DEFAULT_TEAMSPEAK_PORT = 9987
         const val REGULAR_CLIENT_TYPE = 0
+
+        // TeamSpeak 3.5.7 (Windows) client identity advertised during the
+        // clientinit handshake. Values come from the public ReSpeak/
+        // tsdeclarations version table.
+        const val CLIENT_PLATFORM = "Windows"
+        const val CLIENT_VERSION_STRING = "3.5.7 [Build: 1613066709]"
+        const val CLIENT_VERSION_SIGN =
+            "Md4ix51veF2pnYqgZLsLCDc+vyqkh7L/Zh+8FdnZLB1WwWZJSw0Esyq8IzMxLrIl/MjStvycGeYDvwDFRja2AQ=="
+
         val TERMINAL_DISCONNECT_REASONS = setOf(4, 5)
         val EMPTY_AUDIO_FRAME = ByteArray(0)
     }

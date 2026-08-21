@@ -214,7 +214,7 @@ private fun ConnectionForm(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
-            text = "连接服务器",
+            text = "Connect to server",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
@@ -230,12 +230,12 @@ private fun ConnectionForm(
                 modifier = Modifier.weight(1f),
                 enabled = !isConnecting,
                 singleLine = true,
-                label = { Text("服务器地址") },
+                label = { Text("Server address") },
                 placeholder = { Text("voice.example.com") },
                 leadingIcon = { Icon(Icons.Outlined.Dns, contentDescription = null) },
                 isError = invalidHost,
                 supportingText = if (invalidHost) {
-                    { Text("请输入服务器地址") }
+                    { Text("Enter the server address") }
                 } else {
                     null
                 },
@@ -247,7 +247,7 @@ private fun ConnectionForm(
                 modifier = Modifier.width(108.dp),
                 enabled = !isConnecting,
                 singleLine = true,
-                label = { Text("端口") },
+                label = { Text("Port") },
                 isError = invalidPort,
                 supportingText = if (invalidPort) {
                     { Text("1–65535") }
@@ -267,11 +267,11 @@ private fun ConnectionForm(
             modifier = Modifier.fillMaxWidth(),
             enabled = !isConnecting,
             singleLine = true,
-            label = { Text("昵称") },
+            label = { Text("Nickname") },
             leadingIcon = { Icon(Icons.Outlined.AlternateEmail, contentDescription = null) },
             isError = invalidNickname,
             supportingText = if (invalidNickname) {
-                { Text("昵称需要 3–30 个字符") }
+                { Text("Nickname must be 3–30 characters") }
             } else {
                 null
             },
@@ -284,7 +284,7 @@ private fun ConnectionForm(
             modifier = Modifier.fillMaxWidth(),
             enabled = !isConnecting,
             singleLine = true,
-            label = { Text("服务器密码（可选）") },
+            label = { Text("Server password (optional)") },
             leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -294,7 +294,7 @@ private fun ConnectionForm(
                         } else {
                             Icons.Outlined.Visibility
                         },
-                        contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
                     )
                 }
             },
@@ -327,9 +327,9 @@ private fun ConnectionForm(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     when (phase) {
-                        ConnectionPhase.RECONNECTING -> "取消重连"
-                        ConnectionPhase.DISCONNECTING -> "正在断开"
-                        else -> "取消连接"
+                        ConnectionPhase.RECONNECTING -> "Cancel reconnect"
+                        ConnectionPhase.DISCONNECTING -> "Disconnecting"
+                        else -> "Cancel connection"
                     },
                 )
             }
@@ -342,7 +342,7 @@ private fun ConnectionForm(
             ) {
                 Icon(Icons.Default.Link, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (phase == ConnectionPhase.ERROR) "重新连接" else "连接")
+                Text(if (phase == ConnectionPhase.ERROR) "Reconnect" else "Connect")
             }
         }
     }
@@ -379,8 +379,8 @@ private fun ConnectedContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "${state.snapshot.channels.size} 个频道 · " +
-                            "${state.snapshot.participants.size} 人在线 · " +
+                        text = "${state.snapshot.channels.size} channels · " +
+                            "${state.snapshot.participants.size} online · " +
                             state.audioRouting.selectedRoute.label,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -399,11 +399,11 @@ private fun ConnectedContent(
                         } else {
                             Icons.AutoMirrored.Outlined.VolumeUp
                         },
-                        contentDescription = if (state.playbackMuted) "打开扬声器" else "静音扬声器",
+                        contentDescription = if (state.playbackMuted) "Unmute speaker" else "Mute speaker",
                     )
                 }
                 IconButton(onClick = onDisconnect) {
-                    Icon(Icons.Default.PowerSettingsNew, contentDescription = "断开连接")
+                    Icon(Icons.Default.PowerSettingsNew, contentDescription = "Disconnect")
                 }
             }
         }
@@ -412,13 +412,13 @@ private fun ConnectedContent(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("频道") },
+                text = { Text("Channels") },
                 icon = { Icon(Icons.Outlined.Tag, contentDescription = null) },
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("用户") },
+                text = { Text("Users") },
                 icon = { Icon(Icons.Outlined.Groups, contentDescription = null) },
             )
         }
@@ -455,7 +455,7 @@ private fun AudioRouteMenu(
         IconButton(onClick = { expanded = true }) {
             Icon(
                 Icons.Outlined.Headphones,
-                contentDescription = "选择音频设备，当前为${routing.selectedRoute.label}",
+                contentDescription = "Select audio device, currently ${routing.selectedRoute.label}",
             )
         }
         DropdownMenu(
@@ -517,9 +517,9 @@ private fun MicrophoneControl(
                     ) {
                         Text(
                             when (option) {
-                                MicrophoneMode.OFF -> "关闭"
-                                MicrophoneMode.PUSH_TO_TALK -> "按住"
-                                MicrophoneMode.CONTINUOUS -> "常开"
+                                MicrophoneMode.OFF -> "Off"
+                                MicrophoneMode.PUSH_TO_TALK -> "Push"
+                                MicrophoneMode.CONTINUOUS -> "Always on"
                             },
                         )
                     }
@@ -554,11 +554,11 @@ private fun MicrophoneControl(
                     )
                     Text(
                         text = if (mode == MicrophoneMode.OFF) {
-                            "麦克风已关闭"
+                            "Microphone is off"
                         } else if (isTransmitting) {
-                            "麦克风常开中"
+                            "Microphone is live"
                         } else {
-                            "正在启动麦克风"
+                            "Starting microphone"
                         },
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -582,7 +582,7 @@ private fun PushToTalkButton(
             .size(58.dp)
             .semantics {
                 role = Role.Button
-                contentDescription = if (active) "正在说话" else "按住说话"
+                contentDescription = if (active) "Speaking" else "Hold to talk"
                 onClick {
                     onPushToTalkChanged(!isTransmitting)
                     true
@@ -655,13 +655,13 @@ private fun ChannelList(
                 channelPassword = ""
                 passwordVisible = false
             },
-            title = { Text("加入“${channel.name}”") },
+            title = { Text("Join “${channel.name}”") },
             text = {
                 OutlinedTextField(
                     value = channelPassword,
                     onValueChange = { channelPassword = it },
                     singleLine = true,
-                    label = { Text("频道密码") },
+                    label = { Text("Channel password") },
                     leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -671,7 +671,7 @@ private fun ChannelList(
                                 } else {
                                     Icons.Outlined.Visibility
                                 },
-                                contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                                contentDescription = if (passwordVisible) "Hide password" else "Show password",
                             )
                         }
                     },
@@ -691,7 +691,7 @@ private fun ChannelList(
                         passwordVisible = false
                     },
                 ) {
-                    Text("加入")
+                    Text("Join")
                 }
             },
             dismissButton = {
@@ -702,14 +702,14 @@ private fun ChannelList(
                         passwordVisible = false
                     },
                 ) {
-                    Text("取消")
+                    Text("Cancel")
                 }
             },
         )
     }
 
     if (rows.isEmpty()) {
-        EmptyList("没有可见频道")
+        EmptyList("No visible channels")
         return
     }
 
@@ -731,7 +731,7 @@ private fun ChannelList(
                             },
                         )
                         .combinedClickable(
-                            onClickLabel = if (isExpanded) "折叠频道" else "展开频道",
+                            onClickLabel = if (isExpanded) "Collapse channel" else "Expand channel",
                             onClick = {
                                 expandedChannelIds = if (isExpanded) {
                                     expandedChannelIds.filterNot { it == row.channel.id }.toIntArray()
@@ -765,7 +765,7 @@ private fun ChannelList(
                         } else {
                             Icons.Outlined.KeyboardArrowRight
                         },
-                        contentDescription = if (isExpanded) "已展开" else "已折叠",
+                        contentDescription = if (isExpanded) "Expanded" else "Collapsed",
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -796,7 +796,7 @@ private fun ChannelList(
                         Spacer(Modifier.width(10.dp))
                         Icon(
                             Icons.Outlined.CheckCircle,
-                            contentDescription = "当前频道",
+                            contentDescription = "Current channel",
                             modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.primary,
                         )
@@ -849,9 +849,9 @@ private fun ChannelParticipantRow(
                 else -> Icons.Outlined.Person
             },
             contentDescription = when {
-                participant.isTalking -> "正在说话"
-                participant.isInputMuted -> "麦克风静音"
-                participant.isOutputMuted -> "扬声器静音"
+                participant.isTalking -> "Speaking"
+                participant.isInputMuted -> "Microphone muted"
+                participant.isOutputMuted -> "Speaker muted"
                 else -> null
             },
             modifier = Modifier.size(19.dp),
@@ -872,7 +872,7 @@ private fun ChannelParticipantRow(
         )
         if (isOwnClient) {
             Text(
-                text = "我",
+                text = "Me",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -891,7 +891,7 @@ private fun ParticipantList(
     }
     var expandedKey by remember { mutableStateOf<String?>(null) }
     if (state.snapshot.participants.isEmpty()) {
-        EmptyList("没有可见用户")
+        EmptyList("No visible users")
         return
     }
 
@@ -948,9 +948,9 @@ private fun ParticipantList(
                                     Icons.AutoMirrored.Outlined.VolumeUp
                                 },
                                 contentDescription = if (settings.muted) {
-                                    "取消静音${participant.nickname}"
+                                    "Unmute ${participant.nickname}"
                                 } else {
-                                    "静音${participant.nickname}"
+                                    "Mute ${participant.nickname}"
                                 },
                             )
                         }
@@ -961,7 +961,7 @@ private fun ParticipantList(
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Tune,
-                                contentDescription = "调整${participant.nickname}的音量",
+                                contentDescription = "Adjust volume for ${participant.nickname}",
                                 tint = if (settings.volumePercent != 100) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
@@ -1008,7 +1008,7 @@ private fun participantAudioDetail(
     channelName: String,
     settings: ParticipantAudioSettings,
 ): String = when {
-    settings.muted -> "$channelName · 已静音"
+    settings.muted -> "$channelName · Muted"
     settings.volumePercent != 100 -> "$channelName · ${settings.volumePercent}%"
     else -> channelName
 }
@@ -1026,12 +1026,12 @@ private fun EmptyList(label: String) {
 @Composable
 private fun StatusIndicator(phase: ConnectionPhase) {
     val (label, color) = when (phase) {
-        ConnectionPhase.DISCONNECTED -> "未连接" to MaterialTheme.colorScheme.outline
-        ConnectionPhase.CONNECTING -> "连接中" to MaterialTheme.colorScheme.tertiary
-        ConnectionPhase.RECONNECTING -> "重连中" to MaterialTheme.colorScheme.tertiary
-        ConnectionPhase.CONNECTED -> "已连接" to MaterialTheme.colorScheme.primary
-        ConnectionPhase.DISCONNECTING -> "断开中" to MaterialTheme.colorScheme.tertiary
-        ConnectionPhase.ERROR -> "连接失败" to MaterialTheme.colorScheme.error
+        ConnectionPhase.DISCONNECTED -> "Disconnected" to MaterialTheme.colorScheme.outline
+        ConnectionPhase.CONNECTING -> "Connecting" to MaterialTheme.colorScheme.tertiary
+        ConnectionPhase.RECONNECTING -> "Reconnecting" to MaterialTheme.colorScheme.tertiary
+        ConnectionPhase.CONNECTED -> "Connected" to MaterialTheme.colorScheme.primary
+        ConnectionPhase.DISCONNECTING -> "Disconnecting" to MaterialTheme.colorScheme.tertiary
+        ConnectionPhase.ERROR -> "Connection failed" to MaterialTheme.colorScheme.error
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
