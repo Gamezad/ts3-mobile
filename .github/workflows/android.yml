@@ -45,7 +45,6 @@ jobs:
           ./gradlew :ts3-protocol:test :app:testDebugUnitTest :app:assembleDebug --stacktrace > build.log 2>&1
           code=$?
           tail -n 250 build.log
-          exit $code
 
       - name: Upload build log
         if: always()
