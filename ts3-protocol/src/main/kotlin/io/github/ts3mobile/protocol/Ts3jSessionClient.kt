@@ -204,6 +204,73 @@ class Ts3jSessionClient : Ts3SessionClient {
         publishSnapshot(generation.get())
     }
 
+    override fun setInputMuted(muted: Boolean) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "clientupdate",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "client_input_muted",
+                if (muted) "1" else "0",
+            ),
+        )
+        current.executeCommand(command).complete()
+        snapshotStore.updateParticipants { participants ->
+            val selfId = current.clientId
+            participants.map { p ->
+                if (p.id == selfId) p.copy(isInputMuted = muted) else p
+            }
+        }
+        publishSnapshot(generation.get())
+    }
+
+    override fun setOutputMuted(muted: Boolean) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "clientupdate",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "client_output_muted",
+                if (muted) "1" else "0",
+            ),
+        )
+        current.executeCommand(command).complete()
+        snapshotStore.updateParticipants { participants ->
+            val selfId = current.clientId
+            participants.map { p ->
+                if (p.id == selfId) p.copy(isOutputMuted = muted) else p
+            }
+        }
+        publishSnapshot(generation.get())
+    }
+
+    override fun setAway(message: String?) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "clientupdate",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "client_away",
+                if (message == null) "0" else "1",
+            ),
+        )
+        if (message != null) {
+            command.add(
+                com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                    "client_away_message",
+                    message,
+                ),
+            )
+        }
+        current.executeCommand(command).complete()
+    }
+
+    override fun sendChannelMessage(message: String) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val channelId = snapshotStore.snapshot().currentChannelId ?: return
+        current.sendChannelMessage(channelId, message)
+    }
+
     override fun close() {
         generation.incrementAndGet()
         val current = socket
