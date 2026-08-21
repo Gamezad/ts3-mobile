@@ -45,6 +45,21 @@ jobs:
           ./gradlew :ts3-protocol:test :app:testDebugUnitTest :app:assembleDebug --stacktrace > build.log 2>&1
           code=$?
           tail -n 250 build.log
+          # Surface Kotlin errors as GitHub annotations
+          awk '
+            /^e: file:\/\// {
+              f=$0; sub(/^e: file:\/\//,"",f)
+              n=split(f,a,":"); file=a[1]; line=a[2]; rest=""
+              for(i=3;i<=n;i++) rest=rest (i>3?":":"") a[i]
+              gsub(/,/,"%2C",rest); gsub(/\r/,"",rest)
+              printf "::error file=%s,line=%s,col=1::%s\n", file, line, rest
+            }
+            /^e: / && !/^e: file:\/\// {
+              msg=$0; sub(/^e: /,"",msg); gsub(/\r/,"",msg); gsub(/,/,"%2C",msg)
+              printf "::error::%s\n", msg
+            }
+          ' build.log
+          exit $code
 
       - name: Upload build log
         if: always()
