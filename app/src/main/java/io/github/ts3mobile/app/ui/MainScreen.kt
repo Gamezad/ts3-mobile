@@ -91,6 +91,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -1090,7 +1091,7 @@ private fun participantDetail(channel: String, settings: ParticipantAudioSetting
 }
 
 @Composable
-private fun EmptyState(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun EmptyState(label: String, icon: ImageVector) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(

@@ -21,7 +21,7 @@ class ServerConfigTest {
             ServerConfig("host", 0, "valid").validationError(),
         )
         assertEquals(
-            "Nickname must contain 3 to 30 characters",
+            "Nickname must contain 2 to 30 characters",
             ServerConfig("host", 9987, "x").validationError(),
         )
     }
