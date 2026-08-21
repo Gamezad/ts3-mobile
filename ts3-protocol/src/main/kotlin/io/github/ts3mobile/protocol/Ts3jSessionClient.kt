@@ -380,16 +380,15 @@ class Ts3jSessionClient : Ts3SessionClient {
 
         override fun onTextMessage(event: TextMessageEvent) {
             if (!isTokenActive(token)) return
-            val target = when (event.targetMode) {
-                com.github.manevolent.ts3j.api.TextMessageTargetMode.CHANNEL ->
-                    ChatMessage.Target.CHANNEL
-                com.github.manevolent.ts3j.api.TextMessageTargetMode.SERVER ->
-                    ChatMessage.Target.SERVER
+            val targetMode = event.getMap()["targetmode"]?.toIntOrNull() ?: 1
+            val target = when (targetMode) {
+                3 -> ChatMessage.Target.SERVER
+                1 -> ChatMessage.Target.CHANNEL
                 else -> ChatMessage.Target.PRIVATE
             }
             val message = ChatMessage(
                 author = event.invokerName.ifBlank { "Server" },
-                text = event.message.orEmpty(),
+                text = event.message,
                 target = target,
             )
             listener?.onChatMessage(message)
