@@ -114,6 +114,7 @@ import io.github.ts3mobile.app.service.TeamSpeakServiceState
 import io.github.ts3mobile.app.storage.Bookmark
 import io.github.ts3mobile.audio.opus.AudioRoutingState
 import io.github.ts3mobile.protocol.ChannelTree
+import io.github.ts3mobile.protocol.ChatMessage
 import io.github.ts3mobile.protocol.ConnectionPhase
 import io.github.ts3mobile.protocol.Ts3Participant
 import kotlin.math.roundToInt
@@ -684,7 +685,7 @@ private fun NicknameEditor(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ChatPanel(
-    messages: List<io.github.ts3mobile.protocol.ChatMessage>,
+    messages: List<ChatMessage>,
     unread: Int,
     onSend: (String) -> Unit,
     onOpened: () -> Unit,
