@@ -214,7 +214,7 @@ class Ts3jSessionClient : Ts3SessionClient {
                 if (muted) "1" else "0",
             ),
         )
-        current.executeCommand(command).complete()
+        runCatching { current.executeCommand(command) }
         snapshotStore.updateParticipants { participants ->
             val selfId = current.clientId
             participants.map { p ->
@@ -234,7 +234,7 @@ class Ts3jSessionClient : Ts3SessionClient {
                 if (muted) "1" else "0",
             ),
         )
-        current.executeCommand(command).complete()
+        runCatching { current.executeCommand(command) }
         snapshotStore.updateParticipants { participants ->
             val selfId = current.clientId
             participants.map { p ->
@@ -262,13 +262,13 @@ class Ts3jSessionClient : Ts3SessionClient {
                 ),
             )
         }
-        current.executeCommand(command).complete()
+        runCatching { current.executeCommand(command) }
     }
 
     override fun sendChannelMessage(message: String) {
         val current = socket?.takeIf { it.isConnected } ?: return
         val channelId = snapshotStore.snapshot().currentChannelId ?: return
-        current.sendChannelMessage(channelId, message)
+        runCatching { current.sendChannelMessage(channelId, message) }
     }
 
     override fun close() {
