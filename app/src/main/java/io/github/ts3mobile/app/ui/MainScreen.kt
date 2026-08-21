@@ -116,6 +116,7 @@ import io.github.ts3mobile.protocol.Ts3Participant
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     form: ConnectionFormState,
