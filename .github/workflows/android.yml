@@ -56,6 +56,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            "app/build/outputs/apk/debug/app-debug.apk#TS3-Mobile-${GITHUB_REF_NAME}-debug.apk" \
             --title "TS3 Mobile ${GITHUB_REF_NAME}" \
-            --notes "Automated debug build."
+            --notes "Automated debug build." \
+            || echo "Release already exists, uploading asset instead."
+
+          gh release upload "${GITHUB_REF_NAME}" \
+            "app/build/outputs/apk/debug/app-debug.apk#TS3-Mobile-${GITHUB_REF_NAME}-debug.apk" \
+            --clobber
