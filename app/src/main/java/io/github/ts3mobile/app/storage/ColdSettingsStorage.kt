@@ -16,7 +16,12 @@ class ColdSettingsStorage(private val context: Context) {
     private val random = SecureRandom()
 
     val bookmarks: Flow<List<Bookmark>> = context.coldDataStore.data.map { prefs ->
-        decodeBookmarks(prefs[bookmarkKey].orEmpty())
+        val stored = decodeBookmarks(prefs[bookmarkKey].orEmpty())
+        if (stored.none { it.host.equals(DEFAULT_BOOKMARK_HOST, ignoreCase = true) }) {
+            listOf(defaultBookmark()) + stored
+        } else {
+            stored
+        }
     }
 
     val defaultNickname: Flow<String> = context.coldDataStore.data.map { prefs ->
@@ -112,5 +117,16 @@ class ColdSettingsStorage(private val context: Context) {
     private companion object {
         const val FIELD = "|"
         const val SEPARATOR = "\n"
+        const val DEFAULT_BOOKMARK_HOST = "ts.coldgame.ir"
+
+        fun defaultBookmark(): Bookmark = Bookmark(
+            id = "coldgame-default",
+            label = "ColdGame",
+            host = DEFAULT_BOOKMARK_HOST,
+            port = 9987,
+            nickname = "",
+            password = "",
+            defaultChannel = "",
+        )
     }
 }

@@ -103,21 +103,16 @@ class Ts3jSessionClient : Ts3SessionClient {
         client.addListener(createListener(client, token))
 
         try {
-            // Prefer ts3j's hostname-based connect so it can resolve _ts3._udp
-            // SRV records (and TSDNS-style hosts). That overload hard-codes
-            // port 9987, so for non-default ports resolve the address here and
-            // connect directly.
             val password = normalized.password.takeIf(String::isNotBlank)
-            if (normalized.port == DEFAULT_TEAMSPEAK_PORT) {
-                logDiagnostic("connecting to ${normalized.host}:$DEFAULT_TEAMSPEAK_PORT")
-                client.connect(normalized.host, password, CONNECT_TIMEOUT_MS)
-            } else {
-                val address = InetSocketAddress(normalized.host, normalized.port)
-                logDiagnostic(
-                    "connecting to ${address.address?.hostAddress ?: normalized.host}:${address.port}",
-                )
-                client.connect(address, password, CONNECT_TIMEOUT_MS)
-            }
+            // Always resolve via our own SRV lookup. This avoids ts3j's
+            // TS3DNS abstraction that throws on missing records and that can
+            // fail on some Android networks, producing the generic
+            // "Problem establishing client connection" error.
+            val address = Ts3SrvLookup.resolve(normalized.host, normalized.port)
+            logDiagnostic(
+                "connecting to ${address.address?.hostAddress ?: address.hostName}:${address.port}",
+            )
+            client.connect(address, password, CONNECT_TIMEOUT_MS)
             if (token != generation.get()) {
                 runCatching { client.close() }
                 if (socket === client) socket = null
@@ -196,7 +191,7 @@ class Ts3jSessionClient : Ts3SessionClient {
         val current = socket?.takeIf { it.isConnected } ?: return
         current.setNickname(trimmed)
         snapshotStore.updateParticipants { participants ->
-            val selfId = socket?.clientId
+            val selfId = current.clientId
             participants.map { participant ->
                 if (participant.id == selfId) participant.copy(nickname = trimmed) else participant
             }

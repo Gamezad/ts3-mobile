@@ -926,6 +926,53 @@ class TeamSpeakService : Service() {
         }
     }
 
+    private fun setInputMuted(muted: Boolean) {
+        if (mutableState.value.inputMuted == muted) return
+        mutableState.update { it.copy(inputMuted = muted) }
+        if (muted) pushToTalkPressed.set(false)
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.setInputMuted(muted) } }
+            reconcileMicrophone()
+            updateNotification()
+        }
+    }
+
+    private fun setOutputMuted(muted: Boolean) {
+        if (mutableState.value.outputMuted == muted) return
+        mutableState.update { it.copy(outputMuted = muted) }
+        audioPlayer.setMuted(muted)
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.setOutputMuted(muted) } }
+        }
+    }
+
+    private fun setAway(message: String?) {
+        val away = message != null
+        mutableState.update { it.copy(away = away, awayMessage = message.orEmpty()) }
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.setAway(message) } }
+        }
+    }
+
+    fun sendChannelChat(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.sendChannelMessage(trimmed) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(channelError = "Failed to send message: ${error.conciseMessage()}")
+                    }
+                }
+        }
+    }
+
+    fun setMasterVolume(volume: Float) {
+        val normalized = volume.coerceIn(0f, 1f)
+        mutableState.update { it.copy(masterVolume = normalized) }
+        audioPlayer.setMasterVolume(normalized)
+    }
+
     private fun setNickname(nickname: String) {
         val trimmed = nickname.trim()
         if (trimmed.length !in 2..30) return
@@ -937,20 +984,6 @@ class TeamSpeakService : Service() {
             } catch (error: Throwable) {
                 mutableState.update {
                     it.copy(channelError = "Failed to update nickname: ${error.conciseMessage()}")
-                }
-            }
-        }
-    }
-
-    private fun resetIdentity() {
-        serviceScope.launch {
-            try {
-                identityVault.resetIdentity()
-                identityMaterial = null
-                mutableState.update { it.copy(identityReady = false) }
-            } catch (error: Throwable) {
-                mutableState.update {
-                    it.copy(microphoneError = "Failed to reset identity: ${error.conciseMessage()}")
                 }
             }
         }
@@ -997,9 +1030,11 @@ class TeamSpeakService : Service() {
             this@TeamSpeakService.setNickname(nickname)
         }
 
-        fun resetIdentity() {
-            this@TeamSpeakService.resetIdentity()
-        }
+        fun setInputMuted(muted: Boolean) = this@TeamSpeakService.setInputMuted(muted)
+        fun setOutputMuted(muted: Boolean) = this@TeamSpeakService.setOutputMuted(muted)
+        fun setAway(message: String?) = this@TeamSpeakService.setAway(message)
+        fun sendChannelChat(message: String) = this@TeamSpeakService.sendChannelChat(message)
+        fun setMasterVolume(volume: Float) = this@TeamSpeakService.setMasterVolume(volume)
 
         fun reportMicrophonePermissionDenied() {
             pushToTalkPressed.set(false)

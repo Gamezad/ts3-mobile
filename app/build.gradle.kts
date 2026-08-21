@@ -12,11 +12,15 @@ android {
         applicationId = "io.github.ts3mobile.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.9.0-m8"
+        versionCode = 10
+        versionName = "0.9.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        // Name release/debug APKs with the version so GitHub releases do not
+        // all show up as "app-debug.apk".
+        setProperty("archivesBaseName", "ColdTs-Client-v$versionName")
     }
 
     buildTypes {

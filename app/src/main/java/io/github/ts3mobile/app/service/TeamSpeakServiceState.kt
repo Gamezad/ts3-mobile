@@ -28,6 +28,10 @@ data class TeamSpeakServiceState(
     val serverLabel: String? = null,
     val identityReady: Boolean = false,
     val playbackMuted: Boolean = false,
+    val inputMuted: Boolean = false,
+    val outputMuted: Boolean = false,
+    val away: Boolean = false,
+    val awayMessage: String = "Away",
     val participantAudioSettings: Map<String, ParticipantAudioSettings> = emptyMap(),
     val microphoneMode: MicrophoneMode = MicrophoneMode.PUSH_TO_TALK,
     val isTransmitting: Boolean = false,
@@ -35,4 +39,5 @@ data class TeamSpeakServiceState(
     val switchingChannelId: Int? = null,
     val channelError: String? = null,
     val audioRouting: AudioRoutingState = AudioRoutingState.Default,
+    val masterVolume: Float = 1f,
 )

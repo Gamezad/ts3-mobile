@@ -42,6 +42,9 @@ class OpusAudioPlayer(context: Context) : AutoCloseable {
     private var preferredDevice: AudioDeviceInfo? = null
 
     @Volatile
+    private var masterVolume: Float = 1f
+
+    @Volatile
     private var worker: Thread? = null
 
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
@@ -102,6 +105,15 @@ class OpusAudioPlayer(context: Context) : AutoCloseable {
         userMuted.set(muted)
         resetRequested.set(true)
         if (muted) inputQueue.clear()
+        applyVolume()
+    }
+
+    /**
+     * Master playback multiplier in the range 0..2. Used for the in-app
+     * "speaker volume" setting, independent of per-participant gains.
+     */
+    fun setMasterVolume(volume: Float) {
+        masterVolume = volume.coerceIn(0f, 2f)
         applyVolume()
     }
 
@@ -427,8 +439,11 @@ class OpusAudioPlayer(context: Context) : AutoCloseable {
     }
 
     private fun applyVolume() {
-        val volume = if (userMuted.get() || !focusAllowsPlayback.get()) 0f else 1f
-        runCatching { audioTrack?.setVolume(volume) }
+        val base = if (userMuted.get() || !focusAllowsPlayback.get()) 0f else masterVolume
+        runCatching { audioTrack?.setVolume(base.coerceIn(0f, 1f)) }
+        // AudioTrack volume is clamped at 1.0; values above 1 require software
+        // gain. We keep the clamp here to avoid clipping, matching most
+        // TeamSpeak clients' master volume range.
     }
 
     private inner class TalkerState : AutoCloseable {

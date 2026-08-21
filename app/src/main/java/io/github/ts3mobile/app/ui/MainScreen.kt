@@ -37,7 +37,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GraphicEq
-import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
@@ -52,6 +51,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -77,7 +77,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -131,14 +130,16 @@ fun MainScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onPlaybackMutedChange: (Boolean) -> Unit,
-    onParticipantMutedChange: (String, Boolean) -> Unit,
-    onParticipantVolumeChange: (String, Int) -> Unit,
     onAudioRouteSelected: (Int) -> Unit,
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
     onJoinChannel: (Int, String) -> Unit,
     onUpdateNickname: (String) -> Unit,
-    onResetIdentity: () -> Unit,
+    onSetInputMuted: (Boolean) -> Unit,
+    onSetOutputMuted: (Boolean) -> Unit,
+    onSetAway: (String?) -> Unit,
+    onSendChat: (String) -> Unit,
+    onSetMasterVolume: (Float) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -200,14 +201,16 @@ fun MainScreen(
                     state = serviceState,
                     onDisconnect = onDisconnect,
                     onPlaybackMutedChange = onPlaybackMutedChange,
-                    onParticipantMutedChange = onParticipantMutedChange,
-                    onParticipantVolumeChange = onParticipantVolumeChange,
                     onAudioRouteSelected = onAudioRouteSelected,
                     onMicrophoneModeChanged = onMicrophoneModeChanged,
                     onPushToTalkChanged = onPushToTalkChanged,
                     onJoinChannel = onJoinChannel,
                     onUpdateNickname = onUpdateNickname,
-                    onResetIdentity = onResetIdentity,
+                    onSetInputMuted = onSetInputMuted,
+                    onSetOutputMuted = onSetOutputMuted,
+                    onSetAway = onSetAway,
+                    onSendChat = onSendChat,
+                    onSetMasterVolume = onSetMasterVolume,
                 )
             } else {
                 ConnectionForm(
@@ -448,6 +451,34 @@ private fun ConnectionForm(
                 )
             }
         }
+
+        Spacer(Modifier.height(8.dp))
+        if (bookmarks.isNotEmpty()) {
+            Text(
+                "Quick connect",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            bookmarks.take(6).forEach { bookmark ->
+                BookmarkRow(
+                    bookmark = bookmark,
+                    enabled = !isConnecting,
+                    onApply = {
+                        onApplyBookmark(bookmark)
+                        onConnect()
+                    },
+                    onDelete = { onDeleteBookmark(bookmark.id) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Powered by ColdGame · coldgame.ir",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
     }
 }
 
@@ -485,16 +516,17 @@ private fun ConnectedContent(
     state: TeamSpeakServiceState,
     onDisconnect: () -> Unit,
     onPlaybackMutedChange: (Boolean) -> Unit,
-    onParticipantMutedChange: (String, Boolean) -> Unit,
-    onParticipantVolumeChange: (String, Int) -> Unit,
     onAudioRouteSelected: (Int) -> Unit,
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
     onJoinChannel: (Int, String) -> Unit,
     onUpdateNickname: (String) -> Unit,
-    onResetIdentity: () -> Unit,
+    onSetInputMuted: (Boolean) -> Unit,
+    onSetOutputMuted: (Boolean) -> Unit,
+    onSetAway: (String?) -> Unit,
+    onSendChat: (String) -> Unit,
+    onSetMasterVolume: (Float) -> Unit,
 ) {
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var nicknameEditorOpen by rememberSaveable { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -528,13 +560,24 @@ private fun ConnectedContent(
                 }
                 AudioRouteMenu(state.audioRouting, onAudioRouteSelected)
                 IconButton({ nicknameEditorOpen = true }) {
-                    Icon(Icons.Outlined.Edit, "Edit nickname")
+                    Icon(Icons.Outlined.Edit, "Profile and away")
                 }
-                IconButton({ onPlaybackMutedChange(!state.playbackMuted) }) {
+                IconButton({ onSetInputMuted(!state.inputMuted) }) {
                     Icon(
-                        if (state.playbackMuted) Icons.AutoMirrored.Outlined.VolumeOff
+                        if (state.inputMuted) Icons.Outlined.MicOff else Icons.Filled.Mic,
+                        if (state.inputMuted) "Unmute microphone" else "Mute microphone",
+                        tint = if (state.inputMuted) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                IconButton({
+                    onSetOutputMuted(!state.outputMuted)
+                    onPlaybackMutedChange(!state.outputMuted)
+                }) {
+                    Icon(
+                        if (state.outputMuted) Icons.AutoMirrored.Outlined.VolumeOff
                         else Icons.AutoMirrored.Outlined.VolumeUp,
-                        if (state.playbackMuted) "Unmute" else "Mute",
+                        if (state.outputMuted) "Unmute" else "Mute",
                     )
                 }
                 IconButton(onDisconnect) {
@@ -543,26 +586,9 @@ private fun ConnectedContent(
             }
         }
 
-        TabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Channels") },
-                icon = { Icon(Icons.Outlined.Tag, null) },
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text("Users") },
-                icon = { Icon(Icons.Outlined.Groups, null) },
-            )
-        }
+        ChannelList(state, onJoinChannel, Modifier.weight(1f))
 
-        Box(Modifier.weight(1f)) {
-            if (selectedTab == 0) ChannelList(state, onJoinChannel)
-            else ParticipantList(state, onParticipantMutedChange, onParticipantVolumeChange)
-        }
-
+        ChannelChatBar(onSendChat = onSendChat)
         MicrophoneControl(
             mode = state.microphoneMode,
             isTransmitting = state.isTransmitting,
@@ -578,12 +604,10 @@ private fun ConnectedContent(
                 ?.nickname
                 ?: "",
             onDismiss = { nicknameEditorOpen = false },
-            onConfirm = {
-                onUpdateNickname(it)
-                nicknameEditorOpen = false
-            },
-            onResetIdentity = {
-                onResetIdentity()
+            initialAway = state.away,
+            onConfirm = { nick, away, awayMessage ->
+                if (nick.isNotBlank()) onUpdateNickname(nick)
+                onSetAway(if (away) awayMessage.ifBlank { "Away" } else null)
                 nicknameEditorOpen = false
             },
         )
@@ -593,11 +617,13 @@ private fun ConnectedContent(
 @Composable
 private fun NicknameEditor(
     initial: String,
+    initialAway: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-    onResetIdentity: () -> Unit,
+    onConfirm: (nick: String, away: Boolean, awayMessage: String) -> Unit,
 ) {
     var value by rememberSaveable(initial) { mutableStateOf(initial) }
+    var away by rememberSaveable { mutableStateOf(initialAway) }
+    var awayMessage by rememberSaveable { mutableStateOf("Away") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Profile") },
@@ -610,30 +636,61 @@ private fun NicknameEditor(
                     label = { Text("Nickname") },
                     leadingIcon = { Icon(Icons.Outlined.Person, null) },
                 )
-                Text(
-                    "Changing your identity will give you a new unique ID on every server. You will need to reconnect for it to take effect.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(checked = away, onCheckedChange = { away = it })
+                    Text("Set yourself as away")
+                }
+                if (away) {
+                    OutlinedTextField(
+                        value = awayMessage,
+                        onValueChange = { awayMessage = it },
+                        singleLine = true,
+                        label = { Text("Away message") },
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(value.trim()) },
+                onClick = { onConfirm(value.trim(), away, awayMessage.trim()) },
                 enabled = value.trim().length in 2..30,
             ) { Text("Save") }
         },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onResetIdentity) {
-                    Icon(Icons.Outlined.Refresh, null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Reset identity", color = MaterialTheme.colorScheme.error)
-                }
-                TextButton(onDismiss) { Text("Cancel") }
-            }
-        },
+        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun ChannelChatBar(onSendChat: (String) -> Unit) {
+    var text by rememberSaveable { mutableStateOf("") }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            placeholder = { Text("Message this channel") },
+            shape = RoundedCornerShape(20.dp),
+        )
+        Button(
+            onClick = {
+                if (text.isNotBlank()) {
+                    onSendChat(text.trim())
+                    text = ""
+                }
+            },
+            enabled = text.isNotBlank(),
+            shape = CircleShape,
+        ) {
+            Text("Send")
+        }
+    }
 }
 
 @Composable
@@ -785,11 +842,18 @@ private fun PushToTalkButton(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, String) -> Unit) {
+private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, String) -> Unit, modifier: Modifier = Modifier) {
     var passwordChannel by remember { mutableStateOf<io.github.ts3mobile.protocol.Ts3Channel?>(null) }
     var channelPassword by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var expandedIds by rememberSaveable { mutableStateOf(intArrayOf()) }
+    // Channels are open by default so member counts and spacer channels
+    // are visible immediately without tapping every row.
+    LaunchedEffect(rows) {
+        if (expandedIds.isEmpty()) {
+            expandedIds = rows.map { it.channel.id }.toIntArray()
+        }
+    }
     val current = state.snapshot.currentChannelId
     val rows = remember(state.snapshot.channels) { ChannelTree.flatten(state.snapshot.channels) }
     val byChannel = remember(state.snapshot.participants) {
@@ -848,7 +912,7 @@ private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, Strin
         return
     }
 
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(modifier.fillMaxSize()) {
         items(rows, key = { it.channel.id }) { row ->
             val isCurrent = row.channel.id == current
             val isSwitching = row.channel.id == state.switchingChannelId
@@ -890,13 +954,17 @@ private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, Strin
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        if (isExpanded) Icons.Outlined.KeyboardArrowDown
-                        else Icons.Outlined.KeyboardArrowRight,
-                        if (isExpanded) "Expanded" else "Collapsed",
-                        Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (participants.isNotEmpty() || row.channel.clientCount > 0) {
+                        Icon(
+                            if (isExpanded) Icons.Outlined.KeyboardArrowDown
+                            else Icons.Outlined.KeyboardArrowRight,
+                            if (isExpanded) "Collapse" else "Expand",
+                            Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Spacer(Modifier.size(20.dp))
+                    }
                     Spacer(Modifier.width(8.dp))
                     Icon(
                         if (row.channel.hasPassword) Icons.Outlined.Lock else Icons.Outlined.Tag,
@@ -966,95 +1034,6 @@ private fun ChannelParticipantRow(p: Ts3Participant, isOwnClient: Boolean, depth
         )
         if (isOwnClient) {
             Text("Me", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
-
-@Composable
-private fun ParticipantList(
-    state: TeamSpeakServiceState,
-    onMuted: (String, Boolean) -> Unit,
-    onVolume: (String, Int) -> Unit,
-) {
-    val channelsById = remember(state.snapshot.channels) {
-        state.snapshot.channels.associateBy { it.id }
-    }
-    var expanded by remember { mutableStateOf<String?>(null) }
-    if (state.snapshot.participants.isEmpty()) {
-        EmptyState("No visible users", Icons.Outlined.Groups)
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(state.snapshot.participants, key = { it.audioControlKey() }) { p ->
-            val key = p.audioControlKey()
-            val settings = state.participantAudioSettings[key] ?: ParticipantAudioSettings()
-            val own = p.id == state.snapshot.ownClientId
-            Column(Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 18.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ParticipantIcon(p, Modifier.size(22.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(p.nickname, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            participantDetail(
-                                channelsById[p.channelId]?.name.orEmpty(),
-                                settings,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (!own) {
-                        IconButton({ onMuted(key, !settings.muted) }) {
-                            Icon(
-                                if (settings.muted) Icons.AutoMirrored.Outlined.VolumeOff
-                                else Icons.AutoMirrored.Outlined.VolumeUp,
-                                if (settings.muted) "Unmute ${p.nickname}" else "Mute ${p.nickname}",
-                            )
-                        }
-                        IconButton({ expanded = if (expanded == key) null else key }) {
-                            Icon(
-                                Icons.Outlined.Tune,
-                                "Adjust volume for ${p.nickname}",
-                                tint = if (settings.volumePercent != 100) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                if (!own && expanded == key) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .padding(start = 54.dp, end = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Slider(
-                            value = settings.volumePercent.toFloat(),
-                            onValueChange = { onVolume(key, (it / 5f).roundToInt() * 5) },
-                            modifier = Modifier.weight(1f),
-                            valueRange = 0f..200f,
-                            steps = 39,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            "${settings.volumePercent}%",
-                            Modifier.width(52.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
         }
     }
 }
