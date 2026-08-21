@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -166,7 +168,7 @@ fun MainScreen(
                         serviceState.unreadChat > 0
                     ) {
                         BadgedBox(badge = { Badge { Text(serviceState.unreadChat.toString()) } }) {
-                            Icon(Icons.Outlined.Edit, null)
+                            Icon(Icons.Outlined.ChatBubbleOutline, "Unread messages")
                         }
                         Spacer(Modifier.width(8.dp))
                     }
@@ -745,7 +747,7 @@ private fun ChatPanel(
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp),
+                            contentPadding = PaddingValues(10.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             items(messages) { message ->
