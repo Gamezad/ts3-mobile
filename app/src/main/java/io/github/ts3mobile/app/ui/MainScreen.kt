@@ -1080,12 +1080,6 @@ private fun ParticipantIcon(p: Ts3Participant, modifier: Modifier = Modifier) {
     )
 }
 
-private fun participantDetail(channel: String, settings: ParticipantAudioSettings): String = when {
-    settings.muted -> "$channel · Muted"
-    settings.volumePercent != 100 -> "$channel · ${settings.volumePercent}%"
-    else -> channel
-}
-
 @Composable
 private fun EmptyState(label: String, icon: ImageVector) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
