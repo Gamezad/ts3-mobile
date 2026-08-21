@@ -1,9 +1,9 @@
 package io.github.ts3mobile.app.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,30 +32,36 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Headphones
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MicOff
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -69,6 +76,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,6 +88,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -99,6 +110,7 @@ import io.github.ts3mobile.app.service.MicrophoneMode
 import io.github.ts3mobile.app.service.ParticipantAudioSettings
 import io.github.ts3mobile.app.service.audioControlKey
 import io.github.ts3mobile.app.service.TeamSpeakServiceState
+import io.github.ts3mobile.app.storage.Bookmark
 import io.github.ts3mobile.audio.opus.AudioRoutingState
 import io.github.ts3mobile.protocol.ChannelTree
 import io.github.ts3mobile.protocol.ConnectionPhase
@@ -109,11 +121,16 @@ import kotlin.math.roundToInt
 @Composable
 fun MainScreen(
     form: ConnectionFormState,
+    bookmarks: List<Bookmark>,
     serviceState: TeamSpeakServiceState,
     onHostChanged: (String) -> Unit,
     onPortChanged: (String) -> Unit,
     onNicknameChanged: (String) -> Unit,
     onPasswordChanged: (String) -> Unit,
+    onDefaultChannelChanged: (String) -> Unit,
+    onSaveBookmark: () -> Unit,
+    onDeleteBookmark: (String) -> Unit,
+    onApplyBookmark: (Bookmark) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onPlaybackMutedChange: (Boolean) -> Unit,
@@ -123,40 +140,62 @@ fun MainScreen(
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
     onJoinChannel: (Int, String) -> Unit,
+    onUpdateNickname: (String) -> Unit,
+    onResetIdentity: () -> Unit,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "TS3 Mobile",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Column {
+                        Text(
+                            text = "ColdTs Client",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                        )
+                        Text(
+                            text = "Ice-cold TeamSpeak",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 },
                 actions = {
                     StatusIndicator(serviceState.status.phase)
                     Spacer(Modifier.width(16.dp))
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
             )
         },
-    ) { contentPadding ->
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(contentPadding),
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                            MaterialTheme.colorScheme.background,
+                        ),
+                    ),
+                )
+                .padding(padding),
         ) {
-            serviceState.status.detail?.let { detail ->
-                StatusMessage(serviceState.status.phase, detail)
-            }
-            serviceState.microphoneError?.let { detail ->
-                StatusMessage(ConnectionPhase.ERROR, detail)
-            }
-            serviceState.channelError?.let { detail ->
-                StatusMessage(ConnectionPhase.ERROR, detail)
-            }
-            serviceState.audioRouting.error?.let { detail ->
-                StatusMessage(ConnectionPhase.ERROR, detail)
+            listOfNotNull(
+                serviceState.status.detail,
+                serviceState.microphoneError,
+                serviceState.channelError,
+                serviceState.audioRouting.error,
+            ).forEach { detail ->
+                StatusMessage(
+                    phase = serviceState.status.phase,
+                    detail = detail,
+                    isError = detail === serviceState.microphoneError ||
+                        detail === serviceState.channelError ||
+                        detail === serviceState.audioRouting.error,
+                )
             }
 
             if (serviceState.status.phase == ConnectionPhase.CONNECTED) {
@@ -170,15 +209,22 @@ fun MainScreen(
                     onMicrophoneModeChanged = onMicrophoneModeChanged,
                     onPushToTalkChanged = onPushToTalkChanged,
                     onJoinChannel = onJoinChannel,
+                    onUpdateNickname = onUpdateNickname,
+                    onResetIdentity = onResetIdentity,
                 )
             } else {
                 ConnectionForm(
                     form = form,
+                    bookmarks = bookmarks,
                     phase = serviceState.status.phase,
                     onHostChanged = onHostChanged,
                     onPortChanged = onPortChanged,
                     onNicknameChanged = onNicknameChanged,
                     onPasswordChanged = onPasswordChanged,
+                    onDefaultChannelChanged = onDefaultChannelChanged,
+                    onSaveBookmark = onSaveBookmark,
+                    onDeleteBookmark = onDeleteBookmark,
+                    onApplyBookmark = onApplyBookmark,
                     onConnect = onConnect,
                     onDisconnect = onDisconnect,
                 )
@@ -190,11 +236,16 @@ fun MainScreen(
 @Composable
 private fun ConnectionForm(
     form: ConnectionFormState,
+    bookmarks: List<Bookmark>,
     phase: ConnectionPhase,
     onHostChanged: (String) -> Unit,
     onPortChanged: (String) -> Unit,
     onNicknameChanged: (String) -> Unit,
     onPasswordChanged: (String) -> Unit,
+    onDefaultChannelChanged: (String) -> Unit,
+    onSaveBookmark: () -> Unit,
+    onDeleteBookmark: (String) -> Unit,
+    onApplyBookmark: (Bookmark) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
@@ -202,28 +253,31 @@ private fun ConnectionForm(
         phase == ConnectionPhase.RECONNECTING ||
         phase == ConnectionPhase.DISCONNECTING
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var showBookmarks by rememberSaveable { mutableStateOf(false) }
+
     val invalidHost = form.submitted && form.host.isBlank()
     val invalidPort = form.submitted && (form.port.toIntOrNull() !in 1..65535)
-    val invalidNickname = form.submitted && form.nickname.trim().length !in 3..30
+    val invalidNickname = form.submitted && form.nickname.trim().length !in 2..30
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Connect to server",
+            text = "Connect to a server",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
+        Text(
+            text = "Enter a domain, IP, or host:port. SRV records are resolved automatically.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(
                 value = form.host,
                 onValueChange = onHostChanged,
@@ -232,19 +286,20 @@ private fun ConnectionForm(
                 singleLine = true,
                 label = { Text("Server address") },
                 placeholder = { Text("voice.example.com") },
-                leadingIcon = { Icon(Icons.Outlined.Dns, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Outlined.Dns, null) },
                 isError = invalidHost,
                 supportingText = if (invalidHost) {
                     { Text("Enter the server address") }
-                } else {
-                    null
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                } else null,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Next,
+                ),
             )
             OutlinedTextField(
                 value = form.port,
                 onValueChange = onPortChanged,
-                modifier = Modifier.width(108.dp),
+                modifier = Modifier.width(104.dp),
                 enabled = !isConnecting,
                 singleLine = true,
                 label = { Text("Port") },
@@ -252,7 +307,7 @@ private fun ConnectionForm(
                 supportingText = if (invalidPort) {
                     { Text("1–65535") }
                 } else {
-                    null
+                    { Text("9987") }
                 },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,
@@ -268,13 +323,11 @@ private fun ConnectionForm(
             enabled = !isConnecting,
             singleLine = true,
             label = { Text("Nickname") },
-            leadingIcon = { Icon(Icons.Outlined.AlternateEmail, contentDescription = null) },
+            leadingIcon = { Icon(Icons.Outlined.AlternateEmail, null) },
             isError = invalidNickname,
             supportingText = if (invalidNickname) {
-                { Text("Nickname must be 3–30 characters") }
-            } else {
-                null
-            },
+                { Text("Nickname must be 2–30 characters") }
+            } else null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
         )
 
@@ -285,26 +338,78 @@ private fun ConnectionForm(
             enabled = !isConnecting,
             singleLine = true,
             label = { Text("Server password (optional)") },
-            leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+            leadingIcon = { Icon(Icons.Outlined.Lock, null) },
             trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                IconButton({ passwordVisible = !passwordVisible }) {
                     Icon(
-                        imageVector = if (passwordVisible) {
-                            Icons.Outlined.VisibilityOff
-                        } else {
-                            Icons.Outlined.Visibility
-                        },
-                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                        if (passwordVisible) Icons.Outlined.VisibilityOff
+                        else Icons.Outlined.Visibility,
+                        if (passwordVisible) "Hide password" else "Show password",
                     )
                 }
             },
-            visualTransformation = if (passwordVisible) {
-                VisualTransformation.None
-            } else {
-                PasswordVisualTransformation()
-            },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            visualTransformation = if (passwordVisible) VisualTransformation.None
+            else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
         )
+
+        OutlinedTextField(
+            value = form.defaultChannel,
+            onValueChange = onDefaultChannelChanged,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isConnecting,
+            singleLine = true,
+            label = { Text("Default channel (optional)") },
+            placeholder = { Text("Lobby / Support") },
+            leadingIcon = { Icon(Icons.Outlined.Tag, null) },
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(
+                onClick = onSaveBookmark,
+                enabled = form.host.isNotBlank() && !isConnecting,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Outlined.BookmarkAdd, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Save bookmark")
+            }
+            OutlinedButton(
+                onClick = { showBookmarks = !showBookmarks },
+                enabled = bookmarks.isNotEmpty(),
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Outlined.Bookmark, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Bookmarks (${bookmarks.size})")
+            }
+        }
+
+        if (showBookmarks) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            ) {
+                if (bookmarks.isEmpty()) {
+                    Text(
+                        "No bookmarks yet.",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    bookmarks.forEach { bookmark ->
+                        BookmarkRow(
+                            bookmark = bookmark,
+                            enabled = !isConnecting,
+                            onApply = { onApplyBookmark(bookmark) },
+                            onDelete = { onDeleteBookmark(bookmark.id) },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(4.dp))
 
@@ -317,13 +422,10 @@ private fun ConnectionForm(
                 enabled = phase != ConnectionPhase.DISCONNECTING,
             ) {
                 if (phase != ConnectionPhase.DISCONNECTING) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                    )
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
                 }
-                Icon(Icons.Default.PowerSettingsNew, contentDescription = null)
+                Icon(Icons.Default.PowerSettingsNew, null)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     when (phase) {
@@ -338,12 +440,45 @@ private fun ConnectionForm(
                 onClick = onConnect,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(54.dp),
+                shape = RoundedCornerShape(16.dp),
             ) {
-                Icon(Icons.Default.Link, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(if (phase == ConnectionPhase.ERROR) "Reconnect" else "Connect")
+                Icon(Icons.Default.Link, null)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (phase == ConnectionPhase.ERROR) "Reconnect" else "Connect",
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun BookmarkRow(
+    bookmark: Bookmark,
+    enabled: Boolean,
+    onApply: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(bookmark.label, fontWeight = FontWeight.SemiBold)
+            Text(
+                bookmark.displayHost +
+                    (bookmark.nickname.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onApply, enabled = enabled) { Text("Use") }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Outlined.Delete, "Delete bookmark", tint = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -359,15 +494,21 @@ private fun ConnectedContent(
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
     onJoinChannel: (Int, String) -> Unit,
+    onUpdateNickname: (String) -> Unit,
+    onResetIdentity: () -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var nicknameEditorOpen by rememberSaveable { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)) {
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            tonalElevation = 2.dp,
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
@@ -388,22 +529,19 @@ private fun ConnectedContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                AudioRouteMenu(
-                    routing = state.audioRouting,
-                    onRouteSelected = onAudioRouteSelected,
-                )
-                IconButton(onClick = { onPlaybackMutedChange(!state.playbackMuted) }) {
+                AudioRouteMenu(state.audioRouting, onAudioRouteSelected)
+                IconButton({ nicknameEditorOpen = true }) {
+                    Icon(Icons.Outlined.Edit, "Edit nickname")
+                }
+                IconButton({ onPlaybackMutedChange(!state.playbackMuted) }) {
                     Icon(
-                        imageVector = if (state.playbackMuted) {
-                            Icons.AutoMirrored.Outlined.VolumeOff
-                        } else {
-                            Icons.AutoMirrored.Outlined.VolumeUp
-                        },
-                        contentDescription = if (state.playbackMuted) "Unmute speaker" else "Mute speaker",
+                        if (state.playbackMuted) Icons.AutoMirrored.Outlined.VolumeOff
+                        else Icons.AutoMirrored.Outlined.VolumeUp,
+                        if (state.playbackMuted) "Unmute" else "Mute",
                     )
                 }
-                IconButton(onClick = onDisconnect) {
-                    Icon(Icons.Default.PowerSettingsNew, contentDescription = "Disconnect")
+                IconButton(onDisconnect) {
+                    Icon(Icons.Default.PowerSettingsNew, "Disconnect")
                 }
             }
         }
@@ -413,26 +551,19 @@ private fun ConnectedContent(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
                 text = { Text("Channels") },
-                icon = { Icon(Icons.Outlined.Tag, contentDescription = null) },
+                icon = { Icon(Icons.Outlined.Tag, null) },
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
                 text = { Text("Users") },
-                icon = { Icon(Icons.Outlined.Groups, contentDescription = null) },
+                icon = { Icon(Icons.Outlined.Groups, null) },
             )
         }
 
         Box(Modifier.weight(1f)) {
-            if (selectedTab == 0) {
-                ChannelList(state, onJoinChannel)
-            } else {
-                ParticipantList(
-                    state = state,
-                    onMutedChange = onParticipantMutedChange,
-                    onVolumeChange = onParticipantVolumeChange,
-                )
-            }
+            if (selectedTab == 0) ChannelList(state, onJoinChannel)
+            else ParticipantList(state, onParticipantMutedChange, onParticipantVolumeChange)
         }
 
         MicrophoneControl(
@@ -442,46 +573,96 @@ private fun ConnectedContent(
             onPushToTalkChanged = onPushToTalkChanged,
         )
     }
+
+    if (nicknameEditorOpen) {
+        NicknameEditor(
+            initial = state.snapshot.participants
+                .firstOrNull { it.id == state.snapshot.ownClientId }
+                ?.nickname
+                ?: "",
+            onDismiss = { nicknameEditorOpen = false },
+            onConfirm = {
+                onUpdateNickname(it)
+                nicknameEditorOpen = false
+            },
+            onResetIdentity = {
+                onResetIdentity()
+                nicknameEditorOpen = false
+            },
+        )
+    }
 }
 
 @Composable
-private fun AudioRouteMenu(
-    routing: AudioRoutingState,
-    onRouteSelected: (Int) -> Unit,
+private fun NicknameEditor(
+    initial: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+    onResetIdentity: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var value by rememberSaveable(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Profile") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    singleLine = true,
+                    label = { Text("Nickname") },
+                    leadingIcon = { Icon(Icons.Outlined.Person, null) },
+                )
+                Text(
+                    "Changing your identity will give you a new unique ID on every server. You will need to reconnect for it to take effect.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(value.trim()) },
+                enabled = value.trim().length in 2..30,
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onResetIdentity) {
+                    Icon(Icons.Outlined.Refresh, null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Reset identity", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
 
+@Composable
+private fun AudioRouteMenu(routing: AudioRoutingState, onRouteSelected: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }) {
+        IconButton({ expanded = true }) {
             Icon(
                 Icons.Outlined.Headphones,
-                contentDescription = "Select audio device, currently ${routing.selectedRoute.label}",
+                "Select audio device, currently ${routing.selectedRoute.label}",
             )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
+        DropdownMenu(expanded, { expanded = false }) {
             routing.routes.forEach { route ->
                 val selected = route.id == routing.selectedRouteId
                 DropdownMenuItem(
                     text = {
-                        Text(
-                            text = route.label,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Text(route.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     onClick = {
                         expanded = false
                         onRouteSelected(route.id)
                     },
                     leadingIcon = {
-                        if (selected) {
-                            Icon(Icons.Outlined.Check, contentDescription = null)
-                        } else {
-                            Spacer(Modifier.size(24.dp))
-                        }
+                        if (selected) Icon(Icons.Outlined.CheckCircle, null)
+                        else Spacer(Modifier.size(24.dp))
                     },
                 )
             }
@@ -497,7 +678,7 @@ private fun MicrophoneControl(
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)) {
+    Surface(tonalElevation = 3.dp) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -511,8 +692,8 @@ private fun MicrophoneControl(
                         selected = mode == option,
                         onClick = { onMicrophoneModeChanged(option) },
                         shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = MicrophoneMode.entries.size,
+                            index,
+                            MicrophoneMode.entries.size,
                         ),
                     ) {
                         Text(
@@ -525,40 +706,30 @@ private fun MicrophoneControl(
                     }
                 }
             }
-
             when (mode) {
                 MicrophoneMode.PUSH_TO_TALK -> PushToTalkButton(
-                    isTransmitting = isTransmitting,
-                    onPushToTalkChanged = onPushToTalkChanged,
+                    isTransmitting,
+                    onPushToTalkChanged,
                 )
-
                 MicrophoneMode.OFF,
                 MicrophoneMode.CONTINUOUS,
                 -> Row(
-                    modifier = Modifier.height(58.dp),
+                    Modifier.height(58.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Icon(
-                        imageVector = if (mode == MicrophoneMode.OFF) {
-                            Icons.Outlined.MicOff
-                        } else {
-                            Icons.Filled.Mic
-                        },
+                        imageVector = if (mode == MicrophoneMode.OFF) Icons.Outlined.MicOff
+                        else Icons.Filled.Mic,
                         contentDescription = null,
-                        tint = if (isTransmitting) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        tint = if (isTransmitting) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = if (mode == MicrophoneMode.OFF) {
-                            "Microphone is off"
-                        } else if (isTransmitting) {
-                            "Microphone is live"
-                        } else {
-                            "Starting microphone"
+                        when {
+                            mode == MicrophoneMode.OFF -> "Microphone is off"
+                            isTransmitting -> "Microphone is live"
+                            else -> "Starting microphone"
                         },
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -574,12 +745,17 @@ private fun PushToTalkButton(
     onPushToTalkChanged: (Boolean) -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
-    val currentPushToTalkChanged by rememberUpdatedState(onPushToTalkChanged)
+    val current by rememberUpdatedState(onPushToTalkChanged)
     val active = pressed || isTransmitting
+    val color by animateColorAsState(
+        targetValue = if (active) MaterialTheme.colorScheme.error
+        else MaterialTheme.colorScheme.primary,
+        label = "ptt",
+    )
 
     Surface(
         modifier = Modifier
-            .size(58.dp)
+            .size(72.dp)
             .semantics {
                 role = Role.Button
                 contentDescription = if (active) "Speaking" else "Hold to talk"
@@ -592,60 +768,39 @@ private fun PushToTalkButton(
                 awaitEachGesture {
                     awaitFirstDown()
                     pressed = true
-                    currentPushToTalkChanged(true)
-                    try {
-                        waitForUpOrCancellation()
-                    } finally {
+                    current(true)
+                    try { waitForUpOrCancellation() } finally {
                         pressed = false
-                        currentPushToTalkChanged(false)
+                        current(false)
                     }
                 }
             },
         shape = CircleShape,
-        color = if (active) {
-            MaterialTheme.colorScheme.error
-        } else {
-            MaterialTheme.colorScheme.primary
-        },
-        contentColor = if (active) {
-            MaterialTheme.colorScheme.onError
-        } else {
-            MaterialTheme.colorScheme.onPrimary
-        },
-        shadowElevation = 2.dp,
+        color = color,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shadowElevation = 6.dp,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Filled.Mic,
-                contentDescription = null,
-                modifier = Modifier.size(28.dp),
-            )
+            Icon(Icons.Filled.Mic, null, Modifier.size(32.dp))
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChannelList(
-    state: TeamSpeakServiceState,
-    onJoinChannel: (Int, String) -> Unit,
-) {
+private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, String) -> Unit) {
     var passwordChannel by remember { mutableStateOf<io.github.ts3mobile.protocol.Ts3Channel?>(null) }
     var channelPassword by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
-    var expandedChannelIds by rememberSaveable { mutableStateOf(intArrayOf()) }
-    val currentChannelId = state.snapshot.currentChannelId
-    val rows = remember(state.snapshot.channels) {
-        ChannelTree.flatten(state.snapshot.channels)
-    }
-    val participantsByChannel = remember(state.snapshot.participants) {
-        state.snapshot.participants.groupBy(Ts3Participant::channelId)
+    var expandedIds by rememberSaveable { mutableStateOf(intArrayOf()) }
+    val current = state.snapshot.currentChannelId
+    val rows = remember(state.snapshot.channels) { ChannelTree.flatten(state.snapshot.channels) }
+    val byChannel = remember(state.snapshot.participants) {
+        state.snapshot.participants.groupBy { it.channelId }
     }
 
-    LaunchedEffect(currentChannelId) {
-        if (currentChannelId != null && currentChannelId !in expandedChannelIds) {
-            expandedChannelIds += currentChannelId
-        }
+    LaunchedEffect(current) {
+        if (current != null && current !in expandedIds) expandedIds += current
     }
 
     passwordChannel?.let { channel ->
@@ -653,97 +808,76 @@ private fun ChannelList(
             onDismissRequest = {
                 passwordChannel = null
                 channelPassword = ""
-                passwordVisible = false
             },
-            title = { Text("Join “${channel.name}”") },
+            title = { Text("Join \u201C${channel.name}\u201D") },
             text = {
                 OutlinedTextField(
                     value = channelPassword,
                     onValueChange = { channelPassword = it },
                     singleLine = true,
                     label = { Text("Channel password") },
-                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.Outlined.Lock, null) },
                     trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        IconButton({ passwordVisible = !passwordVisible }) {
                             Icon(
-                                imageVector = if (passwordVisible) {
-                                    Icons.Outlined.VisibilityOff
-                                } else {
-                                    Icons.Outlined.Visibility
-                                },
-                                contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                if (passwordVisible) Icons.Outlined.VisibilityOff
+                                else Icons.Outlined.Visibility,
+                                if (passwordVisible) "Hide" else "Show",
                             )
                         }
                     },
-                    visualTransformation = if (passwordVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None
+                    else PasswordVisualTransformation(),
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        onJoinChannel(channel.id, channelPassword)
-                        passwordChannel = null
-                        channelPassword = ""
-                        passwordVisible = false
-                    },
-                ) {
-                    Text("Join")
-                }
+                TextButton({
+                    onJoinChannel(channel.id, channelPassword)
+                    passwordChannel = null
+                    channelPassword = ""
+                }) { Text("Join") }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        passwordChannel = null
-                        channelPassword = ""
-                        passwordVisible = false
-                    },
-                ) {
-                    Text("Cancel")
-                }
+                TextButton({
+                    passwordChannel = null
+                    channelPassword = ""
+                }) { Text("Cancel") }
             },
         )
     }
 
     if (rows.isEmpty()) {
-        EmptyList("No visible channels")
+        EmptyState("No visible channels", Icons.Outlined.Tag)
         return
     }
 
     LazyColumn(Modifier.fillMaxSize()) {
         items(rows, key = { it.channel.id }) { row ->
-            val isCurrent = row.channel.id == currentChannelId
+            val isCurrent = row.channel.id == current
             val isSwitching = row.channel.id == state.switchingChannelId
-            val participants = participantsByChannel[row.channel.id].orEmpty()
-            val isExpanded = row.channel.id in expandedChannelIds
+            val isExpanded = row.channel.id in expandedIds
+            val participants = byChannel[row.channel.id].orEmpty()
             Column(Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            if (isCurrent) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            },
+                            if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.surface,
                         )
                         .combinedClickable(
-                            onClickLabel = if (isExpanded) "Collapse channel" else "Expand channel",
+                            onClickLabel = if (isExpanded) "Collapse" else "Expand",
                             onClick = {
-                                expandedChannelIds = if (isExpanded) {
-                                    expandedChannelIds.filterNot { it == row.channel.id }.toIntArray()
+                                expandedIds = if (isExpanded) {
+                                    expandedIds.filterNot { it == row.channel.id }.toIntArray()
                                 } else {
-                                    expandedChannelIds + row.channel.id
+                                    expandedIds + row.channel.id
                                 }
                             },
                             onDoubleClick = {
                                 if (!isCurrent && state.switchingChannelId == null) {
                                     if (row.channel.hasPassword) {
                                         channelPassword = ""
-                                        passwordVisible = false
                                         passwordChannel = row.channel
                                     } else {
                                         onJoinChannel(row.channel.id, "")
@@ -760,35 +894,24 @@ private fun ChannelList(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        imageVector = if (isExpanded) {
-                            Icons.Outlined.KeyboardArrowDown
-                        } else {
-                            Icons.Outlined.KeyboardArrowRight
-                        },
-                        contentDescription = if (isExpanded) "Expanded" else "Collapsed",
-                        modifier = Modifier.size(20.dp),
+                        if (isExpanded) Icons.Outlined.KeyboardArrowDown
+                        else Icons.Outlined.KeyboardArrowRight,
+                        if (isExpanded) "Expanded" else "Collapsed",
+                        Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(8.dp))
                     Icon(
-                        imageVector = if (row.channel.hasPassword) Icons.Outlined.Lock else Icons.Outlined.Tag,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = if (row.channel.isDefault || isCurrent) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        if (row.channel.hasPassword) Icons.Outlined.Lock else Icons.Outlined.Tag,
+                        null,
+                        Modifier.size(20.dp),
+                        tint = if (row.channel.isDefault || isCurrent) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(10.dp))
+                    Text(row.channel.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        text = row.channel.name,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = row.channel.clientCount.toString(),
+                        row.channel.clientCount.toString(),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -796,43 +919,36 @@ private fun ChannelList(
                         Spacer(Modifier.width(10.dp))
                         Icon(
                             Icons.Outlined.CheckCircle,
-                            contentDescription = "Current channel",
-                            modifier = Modifier.size(20.dp),
+                            "Current channel",
+                            Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     } else if (isSwitching) {
                         Spacer(Modifier.width(10.dp))
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
                 }
                 if (isExpanded) {
-                    participants.forEach { participant ->
+                    participants.forEach { p ->
                         ChannelParticipantRow(
-                            participant = participant,
-                            isOwnClient = participant.id == state.snapshot.ownClientId,
+                            p,
+                            isOwnClient = p.id == state.snapshot.ownClientId,
                             depth = row.depth,
                         )
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
         }
     }
 }
 
 @Composable
-private fun ChannelParticipantRow(
-    participant: Ts3Participant,
-    isOwnClient: Boolean,
-    depth: Int,
-) {
+private fun ChannelParticipantRow(p: Ts3Participant, isOwnClient: Boolean, depth: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
             .padding(
                 start = (48 + depth * 20).coerceAtMost(112).dp,
                 end = 16.dp,
@@ -841,41 +957,18 @@ private fun ChannelParticipantRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = when {
-                participant.isTalking -> Icons.Outlined.GraphicEq
-                participant.isInputMuted -> Icons.Outlined.MicOff
-                participant.isOutputMuted -> Icons.AutoMirrored.Outlined.VolumeOff
-                else -> Icons.Outlined.Person
-            },
-            contentDescription = when {
-                participant.isTalking -> "Speaking"
-                participant.isInputMuted -> "Microphone muted"
-                participant.isOutputMuted -> "Speaker muted"
-                else -> null
-            },
-            modifier = Modifier.size(19.dp),
-            tint = if (participant.isTalking) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
+        ParticipantIcon(p, Modifier.size(19.dp))
         Spacer(Modifier.width(10.dp))
         Text(
-            text = participant.nickname,
-            modifier = Modifier.weight(1f),
+            p.nickname,
+            Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (isOwnClient) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (isOwnClient) {
-            Text(
-                text = "Me",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Text("Me", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -883,23 +976,22 @@ private fun ChannelParticipantRow(
 @Composable
 private fun ParticipantList(
     state: TeamSpeakServiceState,
-    onMutedChange: (String, Boolean) -> Unit,
-    onVolumeChange: (String, Int) -> Unit,
+    onMuted: (String, Boolean) -> Unit,
+    onVolume: (String, Int) -> Unit,
 ) {
     val channelsById = remember(state.snapshot.channels) {
         state.snapshot.channels.associateBy { it.id }
     }
-    var expandedKey by remember { mutableStateOf<String?>(null) }
+    var expanded by remember { mutableStateOf<String?>(null) }
     if (state.snapshot.participants.isEmpty()) {
-        EmptyList("No visible users")
+        EmptyState("No visible users", Icons.Outlined.Groups)
         return
     }
-
     LazyColumn(Modifier.fillMaxSize()) {
-        items(state.snapshot.participants, key = { it.audioControlKey() }) { participant ->
-            val key = participant.audioControlKey()
+        items(state.snapshot.participants, key = { it.audioControlKey() }) { p ->
+            val key = p.audioControlKey()
             val settings = state.participantAudioSettings[key] ?: ParticipantAudioSettings()
-            val isOwnClient = participant.id == state.snapshot.ownClientId
+            val own = p.id == state.snapshot.ownClientId
             Column(Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
@@ -907,31 +999,14 @@ private fun ParticipantList(
                         .padding(start = 18.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = when {
-                            participant.isTalking -> Icons.Outlined.GraphicEq
-                            participant.isInputMuted -> Icons.Outlined.MicOff
-                            participant.isOutputMuted -> Icons.AutoMirrored.Outlined.VolumeOff
-                            else -> Icons.Outlined.Person
-                        },
-                        contentDescription = null,
-                        tint = if (participant.isTalking) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
+                    ParticipantIcon(p, Modifier.size(22.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
+                        Text(p.nickname, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            text = participant.nickname,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = participantAudioDetail(
-                                channelName = channelsById[participant.channelId]?.name.orEmpty(),
-                                settings = settings,
+                            participantDetail(
+                                channelsById[p.channelId]?.name.orEmpty(),
+                                settings,
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -939,39 +1014,25 @@ private fun ParticipantList(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    if (!isOwnClient) {
-                        IconButton(onClick = { onMutedChange(key, !settings.muted) }) {
+                    if (!own) {
+                        IconButton({ onMuted(key, !settings.muted) }) {
                             Icon(
-                                imageVector = if (settings.muted) {
-                                    Icons.AutoMirrored.Outlined.VolumeOff
-                                } else {
-                                    Icons.AutoMirrored.Outlined.VolumeUp
-                                },
-                                contentDescription = if (settings.muted) {
-                                    "Unmute ${participant.nickname}"
-                                } else {
-                                    "Mute ${participant.nickname}"
-                                },
+                                if (settings.muted) Icons.AutoMirrored.Outlined.VolumeOff
+                                else Icons.AutoMirrored.Outlined.VolumeUp,
+                                if (settings.muted) "Unmute ${p.nickname}" else "Mute ${p.nickname}",
                             )
                         }
-                        IconButton(
-                            onClick = {
-                                expandedKey = if (expandedKey == key) null else key
-                            },
-                        ) {
+                        IconButton({ expanded = if (expanded == key) null else key }) {
                             Icon(
-                                imageVector = Icons.Outlined.Tune,
-                                contentDescription = "Adjust volume for ${participant.nickname}",
-                                tint = if (settings.volumePercent != 100) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
+                                Icons.Outlined.Tune,
+                                "Adjust volume for ${p.nickname}",
+                                tint = if (settings.volumePercent != 100) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                 }
-                if (!isOwnClient && expandedKey == key) {
+                if (!own && expanded == key) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -981,92 +1042,107 @@ private fun ParticipantList(
                     ) {
                         Slider(
                             value = settings.volumePercent.toFloat(),
-                            onValueChange = { value ->
-                                val volume = (value / 5f).roundToInt() * 5
-                                onVolumeChange(key, volume)
-                            },
+                            onValueChange = { onVolume(key, (it / 5f).roundToInt() * 5) },
                             modifier = Modifier.weight(1f),
                             valueRange = 0f..200f,
                             steps = 39,
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            text = "${settings.volumePercent}%",
-                            modifier = Modifier.width(52.dp),
+                            "${settings.volumePercent}%",
+                            Modifier.width(52.dp),
                             style = MaterialTheme.typography.labelLarge,
                             maxLines = 1,
                         )
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
         }
     }
 }
 
-private fun participantAudioDetail(
-    channelName: String,
-    settings: ParticipantAudioSettings,
-): String = when {
-    settings.muted -> "$channelName · Muted"
-    settings.volumePercent != 100 -> "$channelName · ${settings.volumePercent}%"
-    else -> channelName
+@Composable
+private fun ParticipantIcon(p: Ts3Participant, modifier: Modifier = Modifier) {
+    Icon(
+        imageVector = when {
+            p.isTalking -> Icons.Outlined.GraphicEq
+            p.isInputMuted -> Icons.Outlined.MicOff
+            p.isOutputMuted -> Icons.AutoMirrored.Outlined.VolumeOff
+            else -> Icons.Outlined.Person
+        },
+        contentDescription = when {
+            p.isTalking -> "Speaking"
+            p.isInputMuted -> "Microphone muted"
+            p.isOutputMuted -> "Speaker muted"
+            else -> null
+        },
+        modifier = modifier,
+        tint = if (p.isTalking) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+private fun participantDetail(channel: String, settings: ParticipantAudioSettings): String = when {
+    settings.muted -> "$channel · Muted"
+    settings.volumePercent != 100 -> "$channel · ${settings.volumePercent}%"
+    else -> channel
 }
 
 @Composable
-private fun EmptyList(label: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun EmptyState(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                icon,
+                null,
+                Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
 @Composable
 private fun StatusIndicator(phase: ConnectionPhase) {
     val (label, color) = when (phase) {
-        ConnectionPhase.DISCONNECTED -> "Disconnected" to MaterialTheme.colorScheme.outline
+        ConnectionPhase.DISCONNECTED -> "Offline" to MaterialTheme.colorScheme.outline
         ConnectionPhase.CONNECTING -> "Connecting" to MaterialTheme.colorScheme.tertiary
         ConnectionPhase.RECONNECTING -> "Reconnecting" to MaterialTheme.colorScheme.tertiary
         ConnectionPhase.CONNECTED -> "Connected" to MaterialTheme.colorScheme.primary
         ConnectionPhase.DISCONNECTING -> "Disconnecting" to MaterialTheme.colorScheme.tertiary
-        ConnectionPhase.ERROR -> "Connection failed" to MaterialTheme.colorScheme.error
+        ConnectionPhase.ERROR -> "Failed" to MaterialTheme.colorScheme.error
     }
-
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier
-                .size(8.dp)
-                .background(color, CircleShape),
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color),
         )
         Spacer(Modifier.width(7.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
-private fun StatusMessage(phase: ConnectionPhase, detail: String) {
-    val background = if (phase == ConnectionPhase.ERROR) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val foreground = if (phase == ConnectionPhase.ERROR) {
-        MaterialTheme.colorScheme.onErrorContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
+private fun StatusMessage(phase: ConnectionPhase, detail: String, isError: Boolean = false) {
+    val error = phase == ConnectionPhase.ERROR || isError
+    val bg = if (error) MaterialTheme.colorScheme.errorContainer
+    else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (error) MaterialTheme.colorScheme.onErrorContainer
+    else MaterialTheme.colorScheme.onSurfaceVariant
     Text(
-        text = detail,
+        detail,
         modifier = Modifier
             .fillMaxWidth()
-            .background(background)
+            .background(bg)
             .padding(horizontal = 20.dp, vertical = 10.dp),
-        color = foreground,
+        color = fg,
         style = MaterialTheme.typography.bodySmall,
-        maxLines = 3,
+        maxLines = 4,
         overflow = TextOverflow.Ellipsis,
     )
 }

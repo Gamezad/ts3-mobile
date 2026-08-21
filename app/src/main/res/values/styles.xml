@@ -3,9 +3,9 @@
     <style name="Theme.Ts3Mobile" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:navigationBarColor">#F8FAF7</item>
-        <item name="android:statusBarColor">#F8FAF7</item>
+        <item name="android:navigationBarColor">#F4F9FD</item>
+        <item name="android:statusBarColor">#F4F9FD</item>
+        <item name="android:colorBackground">#F4F9FD</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>
-

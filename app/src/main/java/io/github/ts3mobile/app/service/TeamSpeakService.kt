@@ -926,6 +926,36 @@ class TeamSpeakService : Service() {
         }
     }
 
+    private fun setNickname(nickname: String) {
+        val trimmed = nickname.trim()
+        if (trimmed.length !in 2..30) return
+        if (mutableState.value.status.phase != ConnectionPhase.CONNECTED) return
+        serviceScope.launch {
+            try {
+                sessionMutex.withLock { session?.setNickname(trimmed) }
+                desiredConfig = desiredConfig?.copy(nickname = trimmed)
+            } catch (error: Throwable) {
+                mutableState.update {
+                    it.copy(channelError = "Failed to update nickname: ${error.conciseMessage()}")
+                }
+            }
+        }
+    }
+
+    private fun resetIdentity() {
+        serviceScope.launch {
+            try {
+                identityVault.resetIdentity()
+                identityMaterial = null
+                mutableState.update { it.copy(identityReady = false) }
+            } catch (error: Throwable) {
+                mutableState.update {
+                    it.copy(microphoneError = "Failed to reset identity: ${error.conciseMessage()}")
+                }
+            }
+        }
+    }
+
     inner class SessionBinder : Binder() {
         val state: StateFlow<TeamSpeakServiceState>
             get() = this@TeamSpeakService.state
@@ -961,6 +991,14 @@ class TeamSpeakService : Service() {
 
         fun joinChannel(channelId: Int, password: String = "") {
             this@TeamSpeakService.joinChannel(channelId, password)
+        }
+
+        fun setNickname(nickname: String) {
+            this@TeamSpeakService.setNickname(nickname)
+        }
+
+        fun resetIdentity() {
+            this@TeamSpeakService.resetIdentity()
         }
 
         fun reportMicrophonePermissionDenied() {

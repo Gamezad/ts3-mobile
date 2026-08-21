@@ -60,6 +60,9 @@ class Ts3jSessionClient : Ts3SessionClient {
         client.setIdentity(identity)
         client.setNickname(normalized.nickname)
         client.setHWID(identity.uid.toBase64())
+        if (normalized.defaultChannel.isNotBlank()) {
+            client.setOption("client.default_channel", normalized.defaultChannel)
+        }
         // Advertise a real, supported TeamSpeak 3 client release. The library
         // ships a placeholder ("3.?.?") that modern servers reject during the
         // handshake, which previously manifested as a connection timeout.
@@ -183,6 +186,20 @@ class Ts3jSessionClient : Ts3SessionClient {
         current.joinChannel(channelId, password)
         snapshotStore.updateParticipant(current.clientId) { participant ->
             participant.copy(channelId = channelId)
+        }
+        publishSnapshot(generation.get())
+    }
+
+    override fun setNickname(nickname: String) {
+        val trimmed = nickname.trim()
+        require(trimmed.length in 2..30) { "Nickname must contain 2 to 30 characters" }
+        val current = socket?.takeIf { it.isConnected } ?: return
+        current.setNickname(trimmed)
+        snapshotStore.updateParticipants { participants ->
+            val selfId = socket?.clientId
+            participants.map { participant ->
+                if (participant.id == selfId) participant.copy(nickname = trimmed) else participant
+            }
         }
         publishSnapshot(generation.get())
     }

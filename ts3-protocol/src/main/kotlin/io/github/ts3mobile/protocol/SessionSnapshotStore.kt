@@ -30,6 +30,12 @@ internal class SessionSnapshotStore {
         participants[id]?.let { participants[id] = transform(it) }
     }
 
+    fun updateParticipants(transform: (List<Ts3Participant>) -> List<Ts3Participant>) = synchronized(lock) {
+        val updated = transform(participants.values.toList()).associateBy { it.id }
+        participants.clear()
+        participants.putAll(updated)
+    }
+
     fun removeParticipant(id: Int) = synchronized(lock) {
         participants.remove(id)
     }

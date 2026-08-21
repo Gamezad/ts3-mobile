@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">TS3 Mobile</string>
-    <string name="notification_channel_name">TeamSpeak connection</string>
+    <string name="app_name">ColdTs Client</string>
+    <string name="notification_channel_name">ColdTs connection</string>
     <string name="notification_connecting">Connecting to %1$s</string>
     <string name="notification_reconnecting">Reconnecting to %1$s</string>
     <string name="notification_disconnecting">Disconnecting from %1$s</string>

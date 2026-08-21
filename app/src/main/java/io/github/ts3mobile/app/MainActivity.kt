@@ -77,14 +77,20 @@ class MainActivity : ComponentActivity() {
                 val serviceState by (serviceBinder?.state ?: fallbackState)
                     .collectAsStateWithLifecycle()
                 val form by viewModel.form.collectAsStateWithLifecycle()
+                val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
 
                 MainScreen(
                     form = form,
+                    bookmarks = bookmarks,
                     serviceState = serviceState,
                     onHostChanged = viewModel::setHost,
                     onPortChanged = viewModel::setPort,
                     onNicknameChanged = viewModel::setNickname,
                     onPasswordChanged = viewModel::setPassword,
+                    onDefaultChannelChanged = viewModel::setDefaultChannel,
+                    onSaveBookmark = viewModel::saveBookmark,
+                    onDeleteBookmark = viewModel::deleteBookmark,
+                    onApplyBookmark = viewModel::applyBookmark,
                     onConnect = {
                         viewModel.submit()?.let(::requestConnection)
                     },
@@ -108,6 +114,12 @@ class MainActivity : ComponentActivity() {
                     onJoinChannel = { channelId, password ->
                         serviceBinder?.joinChannel(channelId, password)
                     },
+                    onUpdateNickname = { nickname ->
+                        viewModel.setNickname(nickname)
+                        viewModel.persistNickname()
+                        serviceBinder?.setNickname(nickname)
+                    },
+                    onResetIdentity = { serviceBinder?.resetIdentity() },
                 )
             }
         }
@@ -140,6 +152,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestConnection(config: ServerConfig) {
+        // Persist the chosen nickname for next launch.
+        viewModel.persistNickname()
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(

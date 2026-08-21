@@ -10,6 +10,7 @@ interface Ts3SessionClient : AutoCloseable {
     fun connect(config: ServerConfig, identityMaterial: String, listener: Ts3SessionListener)
     fun setVoiceSource(source: EncodedVoiceSource?)
     fun joinChannel(channelId: Int, password: String = "")
+    fun setNickname(nickname: String)
     fun disconnect(reason: String = "Client disconnected")
     override fun close()
 }
