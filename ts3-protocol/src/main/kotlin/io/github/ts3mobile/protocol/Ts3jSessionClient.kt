@@ -276,7 +276,7 @@ class Ts3jSessionClient : Ts3SessionClient {
             com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("targetmode", "3"),
             com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
                 "target",
-                current.clientId.toString(),
+                "0",
             ),
             com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("msg", message),
         )
