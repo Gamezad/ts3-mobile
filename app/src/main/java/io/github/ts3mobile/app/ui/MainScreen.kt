@@ -847,17 +847,17 @@ private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, Strin
     var channelPassword by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var expandedIds by rememberSaveable { mutableStateOf(intArrayOf()) }
+    val current = state.snapshot.currentChannelId
+    val rows = remember(state.snapshot.channels) { ChannelTree.flatten(state.snapshot.channels) }
+    val byChannel = remember(state.snapshot.participants) {
+        state.snapshot.participants.groupBy { it.channelId }
+    }
     // Channels are open by default so member counts and spacer channels
     // are visible immediately without tapping every row.
     LaunchedEffect(rows) {
         if (expandedIds.isEmpty()) {
             expandedIds = rows.map { it.channel.id }.toIntArray()
         }
-    }
-    val current = state.snapshot.currentChannelId
-    val rows = remember(state.snapshot.channels) { ChannelTree.flatten(state.snapshot.channels) }
-    val byChannel = remember(state.snapshot.participants) {
-        state.snapshot.participants.groupBy { it.channelId }
     }
 
     LaunchedEffect(current) {
