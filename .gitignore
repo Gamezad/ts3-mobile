@@ -14,3 +14,5 @@ captures/
 *.keystore
 *.log
 .DS_Store
+
+# CI workflow trigger marker for APK build
