@@ -17,6 +17,7 @@ import com.github.manevolent.ts3j.protocol.packet.PacketBody0Voice
 import com.github.manevolent.ts3j.protocol.packet.PacketBody1VoiceWhisper
 import com.github.manevolent.ts3j.protocol.PacketKind
 import com.github.manevolent.ts3j.protocol.socket.client.LocalTeamspeakClientSocket
+import com.github.manevolent.ts3j.protocol.socket.client.PatchedLocalTeamspeakClientSocket
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.TimeoutException
@@ -52,7 +53,7 @@ class Ts3jSessionClient : Ts3SessionClient {
         emitStatus(token, ConnectionStatus(ConnectionPhase.CONNECTING))
 
         val identity = Ts3IdentityCodec.decode(identityMaterial)
-        val client = LocalTeamspeakClientSocket()
+        val client = PatchedLocalTeamspeakClientSocket()
         val asynchronousFailure = AtomicReference<Throwable?>(null)
         socket = client
 
