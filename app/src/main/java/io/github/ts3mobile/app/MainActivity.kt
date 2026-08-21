@@ -130,6 +130,7 @@ class MainActivity : ComponentActivity() {
                     onSetAway = { serviceBinder?.setAway(it) },
                     onSendChat = { serviceBinder?.sendChannelChat(it) },
                     onSetMasterVolume = { serviceBinder?.setMasterVolume(it) },
+                    onChatOpened = { serviceBinder?.markChatRead() },
                 )
             }
         }

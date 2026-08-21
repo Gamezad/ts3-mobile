@@ -1,6 +1,7 @@
 package io.github.ts3mobile.app.service
 
 import io.github.ts3mobile.audio.opus.AudioRoutingState
+import io.github.ts3mobile.protocol.ChatMessage
 import io.github.ts3mobile.protocol.ConnectionStatus
 import io.github.ts3mobile.protocol.SessionSnapshot
 import io.github.ts3mobile.protocol.Ts3Participant
@@ -40,4 +41,6 @@ data class TeamSpeakServiceState(
     val channelError: String? = null,
     val audioRouting: AudioRoutingState = AudioRoutingState.Default,
     val masterVolume: Float = 1f,
+    val chatMessages: List<ChatMessage> = emptyList(),
+    val unreadChat: Int = 0,
 )

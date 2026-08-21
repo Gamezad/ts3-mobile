@@ -50,6 +50,8 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
@@ -140,6 +142,7 @@ fun MainScreen(
     onSetAway: (String?) -> Unit,
     onSendChat: (String) -> Unit,
     onSetMasterVolume: (Float) -> Unit,
+    onChatOpened: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -159,6 +162,14 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    if (serviceState.status.phase == ConnectionPhase.CONNECTED &&
+                        serviceState.unreadChat > 0
+                    ) {
+                        BadgedBox(badge = { Badge { Text(serviceState.unreadChat.toString()) } }) {
+                            Icon(Icons.Outlined.Edit, null)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     StatusIndicator(serviceState.status.phase)
                     Spacer(Modifier.width(16.dp))
                 },
@@ -211,6 +222,7 @@ fun MainScreen(
                     onSetAway = onSetAway,
                     onSendChat = onSendChat,
                     onSetMasterVolume = onSetMasterVolume,
+                    onChatOpened = onChatOpened,
                 )
             } else {
                 ConnectionForm(
@@ -526,6 +538,7 @@ private fun ConnectedContent(
     onSetAway: (String?) -> Unit,
     onSendChat: (String) -> Unit,
     onSetMasterVolume: (Float) -> Unit,
+    onChatOpened: () -> Unit = {},
 ) {
     var nicknameEditorOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -588,7 +601,12 @@ private fun ConnectedContent(
 
         ChannelList(state, onJoinChannel, Modifier.weight(1f))
 
-        ChannelChatBar(onSendChat = onSendChat)
+        ChatPanel(
+            messages = state.chatMessages,
+            unread = state.unreadChat,
+            onSend = onSendChat,
+            onOpened = onChatOpened,
+        )
         MicrophoneControl(
             mode = state.microphoneMode,
             isTransmitting = state.isTransmitting,
@@ -660,35 +678,131 @@ private fun NicknameEditor(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChannelChatBar(onSendChat: (String) -> Unit) {
+private fun ChatPanel(
+    messages: List<io.github.ts3mobile.protocol.ChatMessage>,
+    unread: Int,
+    onSend: (String) -> Unit,
+    onOpened: () -> Unit,
+) {
+    var open by rememberSaveable { mutableStateOf(false) }
     var text by rememberSaveable { mutableStateOf("") }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            placeholder = { Text("Message this channel") },
-            shape = RoundedCornerShape(20.dp),
-        )
-        Button(
-            onClick = {
-                if (text.isNotBlank()) {
-                    onSendChat(text.trim())
-                    text = ""
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    LaunchedEffect(messages.size, open) {
+        if (open) {
+            onOpened()
+            if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    Surface(tonalElevation = 2.dp) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .combinedClickable(
+                        onClick = { open = !open },
+                    )
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (open) "Hide chat" else "Channel chat",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                if (unread > 0 && !open) {
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ) { Text(unread.toString()) }
+                    Spacer(Modifier.width(8.dp))
                 }
-            },
-            enabled = text.isNotBlank(),
-            shape = CircleShape,
-        ) {
-            Text("Send")
+                Icon(
+                    if (open) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight,
+                    if (open) "Hide" else "Show",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (open) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                ) {
+                    if (messages.isEmpty()) {
+                        Text(
+                            "No messages yet.",
+                            Modifier.align(Alignment.Center),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            items(messages) { message ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (message.isOwn)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.surface,
+                                    tonalElevation = 1.dp,
+                                ) {
+                                    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                        Text(
+                                            message.author,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (message.isOwn)
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.primary,
+                                        )
+                                        Text(
+                                            message.text,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Row(
+                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("Message this channel") },
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                    Button(
+                        onClick = {
+                            if (text.isNotBlank()) {
+                                onSend(text.trim())
+                                text = ""
+                            }
+                        },
+                        enabled = text.isNotBlank(),
+                        shape = CircleShape,
+                    ) {
+                        Text("Send")
+                    }
+                }
+            }
         }
     }
 }

@@ -177,14 +177,15 @@ class TeamSpeakService : Service() {
 
         val selectedMicrophoneMode = mutableState.value.microphoneMode
         val selectedPlaybackMuted = mutableState.value.playbackMuted
+        val selectedRouting = mutableState.value.audioRouting
         audioPlayer.replaceParticipantGains(emptyMap())
         pushToTalkPressed.set(false)
         mutableState.value = TeamSpeakServiceState(
+            audioRouting = selectedRouting,
             status = ConnectionStatus(ConnectionPhase.CONNECTING),
             serverLabel = "${config.host}:${config.port}",
             microphoneMode = selectedMicrophoneMode,
             playbackMuted = selectedPlaybackMuted,
-            audioRouting = mutableState.value.audioRouting,
         )
         if (session != null) session?.close()
 
@@ -370,6 +371,53 @@ class TeamSpeakService : Service() {
         override fun onVoiceFrame(frame: VoiceFrame) {
             if (isListenerActive(this) && connected) audioPlayer.submit(frame)
         }
+
+        override fun onChatMessage(message: io.github.ts3mobile.protocol.ChatMessage) {
+            if (!isListenerActive(this)) return
+            addChatMessage(message)
+        }
+    }
+
+    private fun addChatMessage(message: io.github.ts3mobile.protocol.ChatMessage) {
+        mutableState.update { current ->
+            val combined = current.chatMessages + message
+            current.copy(
+                chatMessages = if (combined.size > MAX_CHAT_MESSAGES) {
+                    combined.takeLast(MAX_CHAT_MESSAGES)
+                } else combined,
+                unreadChat = current.unreadChat + 1,
+            )
+        }
+    }
+
+    fun sendChannelChat(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.sendChannelMessage(trimmed) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(channelError = "Failed to send message: ${error.conciseMessage()}")
+                    }
+                }
+        }
+    }
+
+    fun sendServerChat(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.sendServerMessage(trimmed) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(channelError = "Failed to send message: ${error.conciseMessage()}")
+                    }
+                }
+        }
+    }
+
+    fun markChatRead() {
+        mutableState.update { it.copy(unreadChat = 0) }
     }
 
     private fun onSessionConnected(listener: SessionListener) {
@@ -954,19 +1002,6 @@ class TeamSpeakService : Service() {
         }
     }
 
-    fun sendChannelChat(message: String) {
-        val trimmed = message.trim()
-        if (trimmed.isEmpty()) return
-        serviceScope.launch {
-            runCatching { sessionMutex.withLock { session?.sendChannelMessage(trimmed) } }
-                .onFailure { error ->
-                    mutableState.update {
-                        it.copy(channelError = "Failed to send message: ${error.conciseMessage()}")
-                    }
-                }
-        }
-    }
-
     fun setMasterVolume(volume: Float) {
         val normalized = volume.coerceIn(0f, 1f)
         mutableState.update { it.copy(masterVolume = normalized) }
@@ -1034,6 +1069,8 @@ class TeamSpeakService : Service() {
         fun setOutputMuted(muted: Boolean) = this@TeamSpeakService.setOutputMuted(muted)
         fun setAway(message: String?) = this@TeamSpeakService.setAway(message)
         fun sendChannelChat(message: String) = this@TeamSpeakService.sendChannelChat(message)
+        fun sendServerChat(message: String) = this@TeamSpeakService.sendServerChat(message)
+        fun markChatRead() = this@TeamSpeakService.markChatRead()
         fun setMasterVolume(volume: Float) = this@TeamSpeakService.setMasterVolume(volume)
 
         fun reportMicrophonePermissionDenied() {
@@ -1074,6 +1111,7 @@ class TeamSpeakService : Service() {
         private const val WAITING_FOR_NETWORK_DETAIL =
             "Network unavailable; will reconnect automatically when it returns"
         private const val MAX_PARTICIPANT_VOLUME_PERCENT = 200
+        private const val MAX_CHAT_MESSAGES = 200
         private val foregroundPhases = setOf(
             ConnectionPhase.CONNECTING,
             ConnectionPhase.RECONNECTING,

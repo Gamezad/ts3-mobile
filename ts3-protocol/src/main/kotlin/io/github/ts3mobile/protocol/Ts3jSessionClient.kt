@@ -12,6 +12,7 @@ import com.github.manevolent.ts3j.event.ClientMovedEvent
 import com.github.manevolent.ts3j.event.ClientUpdatedEvent
 import com.github.manevolent.ts3j.event.DisconnectedEvent
 import com.github.manevolent.ts3j.event.TS3Listener
+import com.github.manevolent.ts3j.event.TextMessageEvent
 import com.github.manevolent.ts3j.enums.CodecType
 import com.github.manevolent.ts3j.protocol.packet.PacketBody0Voice
 import com.github.manevolent.ts3j.protocol.packet.PacketBody1VoiceWhisper
@@ -264,6 +265,38 @@ class Ts3jSessionClient : Ts3SessionClient {
         val current = socket?.takeIf { it.isConnected } ?: return
         val channelId = snapshotStore.snapshot().currentChannelId ?: return
         runCatching { current.sendChannelMessage(channelId, message) }
+        emitOwnMessage(message, ChatMessage.Target.CHANNEL)
+    }
+
+    override fun sendServerMessage(message: String) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "sendtextmessage",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("targetmode", "3"),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "target",
+                current.clientId.toString(),
+            ),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("msg", message),
+        )
+        runCatching { current.executeCommand(command) }
+        emitOwnMessage(message, ChatMessage.Target.SERVER)
+    }
+
+    private fun emitOwnMessage(text: String, target: ChatMessage.Target) {
+        val name = runCatching {
+            snapshotStore.snapshot().participants
+                .firstOrNull { it.id == socket?.clientId }?.nickname
+        }.getOrNull().orEmpty().ifBlank { "Me" }
+        listener?.onChatMessage(
+            ChatMessage(
+                author = name,
+                text = text,
+                target = target,
+                isOwn = true,
+            ),
+        )
     }
 
     override fun close() {
@@ -343,6 +376,23 @@ class Ts3jSessionClient : Ts3SessionClient {
                 it.copy(parentId = event.channelParentId, orderAfterId = event.channelOrder)
             }
             publishSnapshotWhenConnected(client, token)
+        }
+
+        override fun onTextMessage(event: TextMessageEvent) {
+            if (!isTokenActive(token)) return
+            val target = when (event.targetMode) {
+                com.github.manevolent.ts3j.api.TextMessageTargetMode.CHANNEL ->
+                    ChatMessage.Target.CHANNEL
+                com.github.manevolent.ts3j.api.TextMessageTargetMode.SERVER ->
+                    ChatMessage.Target.SERVER
+                else -> ChatMessage.Target.PRIVATE
+            }
+            val message = ChatMessage(
+                author = event.invokerName.ifBlank { "Server" },
+                text = event.message.orEmpty(),
+                target = target,
+            )
+            listener?.onChatMessage(message)
         }
     }
 
