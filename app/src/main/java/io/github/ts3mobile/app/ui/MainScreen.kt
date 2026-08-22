@@ -152,7 +152,7 @@ fun MainScreen(
     onOpenPm: (Int) -> Unit = {},
     onSendPm: (Int, String) -> Unit = { _, _ -> },
 ) {
-    Scaffold
+    Scaffold(
         topBar = {
             TopAppBar(
                 title = {
