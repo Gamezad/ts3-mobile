@@ -10,11 +10,11 @@ import java.net.Socket
 import kotlin.concurrent.thread
 
 /**
- * TeamSpeak 3 endpoint resolution, matching official client order:
+ * TeamSpeak 3 endpoint resolution matching official client order:
  *  1. explicit port -> direct
- *  2. SRV record `_ts3._udp.<host>`
+ *  2. SRV `_ts3._udp.<host>`
  *  3. direct host:9987
- *  4. TSDNS query on TCP 41144 (can return "host:port" or error)
+ *  4. TSDNS query on TCP 41144 (returns "host:port" or "host")
  */
 internal object Ts3SrvLookup {
     private const val TS3_VOICE_DEFAULT_PORT = 9987
@@ -53,35 +53,33 @@ internal object Ts3SrvLookup {
             .firstOrNull { !it.isUnresolved }
     }
 
-    private fun resolveTsDns(host: String): InetSocketAddress? = try {
-        // TSDNS is a simple line-based TCP protocol: connect to port 41144,
-        // send the hostname + "\r\n", read a response line.
-        // Response "host:port" or "host" (port 9987) means use that.
-        // "404" or "3xx" means not found.
-        lateinit var result: InetSocketAddress
+    private fun resolveTsDns(host: String): InetSocketAddress? {
+        var answer: InetSocketAddress? = null
         val t = thread(name = "tsdns", isDaemon = true) {
             runCatching {
                 Socket().use { socket ->
                     socket.connect(InetSocketAddress(host, TSDNS_PORT), 2_000)
                     socket.soTimeout = 2_000
                     socket.getOutputStream().bufferedWriter().use { out ->
-                        out.write(host); out.write("\r\n"); out.flush()
+                        out.write(host)
+                        out.write("\r\n")
+                        out.flush()
                     }
                     val line = BufferedReader(InputStreamReader(socket.getInputStream())).readLine()
                         ?: return@runCatching
-                    val answer = line.trim()
-                    if (answer.isBlank() || answer.startsWith("4") || answer.startsWith("3")) return@runCatching
-                    val parts = answer.split(":")
+                    val response = line.trim()
+                    if (response.isBlank() || response.startsWith("4") || response.startsWith("3")) {
+                        return@runCatching
+                    }
+                    val parts = response.split(":")
                     val resolvedHost = parts[0]
                     val resolvedPort = parts.getOrNull(1)?.toIntOrNull() ?: TS3_VOICE_DEFAULT_PORT
-                    result = InetSocketAddress(resolvedHost, resolvedPort)
+                    answer = InetSocketAddress(resolvedHost, resolvedPort)
                 }
             }
         }
         t.join(2_500)
         if (t.isAlive) t.interrupt()
-        if (::result.isInitialized && !result.isUnresolved) result else null
-    } catch (_: Throwable) {
-        null
+        return answer?.takeIf { !it.isUnresolved }
     }
 }
