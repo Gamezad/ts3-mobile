@@ -30,7 +30,7 @@ data class AudioRoutingState(
         val SystemRoute = AudioRouteOption(
             id = SYSTEM_AUDIO_ROUTE_ID,
             kind = AudioRouteKind.SYSTEM,
-            label = "系统自动",
+            label = "System default",
         )
 
         val Default = AudioRoutingState()

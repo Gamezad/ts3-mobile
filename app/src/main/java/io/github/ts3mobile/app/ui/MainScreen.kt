@@ -1,9 +1,9 @@
 package io.github.ts3mobile.app.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -15,13 +15,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -32,11 +35,11 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GraphicEq
-import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Headphones
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Lock
@@ -46,15 +49,25 @@ import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -64,15 +77,13 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -80,6 +91,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -96,11 +111,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.ts3mobile.app.ConnectionFormState
 import io.github.ts3mobile.app.service.MicrophoneMode
-import io.github.ts3mobile.app.service.ParticipantAudioSettings
 import io.github.ts3mobile.app.service.audioControlKey
 import io.github.ts3mobile.app.service.TeamSpeakServiceState
+import io.github.ts3mobile.app.storage.Bookmark
 import io.github.ts3mobile.audio.opus.AudioRoutingState
 import io.github.ts3mobile.protocol.ChannelTree
+import io.github.ts3mobile.protocol.ChatMessage
 import io.github.ts3mobile.protocol.ConnectionPhase
 import io.github.ts3mobile.protocol.Ts3Participant
 import kotlin.math.roundToInt
@@ -109,54 +125,94 @@ import kotlin.math.roundToInt
 @Composable
 fun MainScreen(
     form: ConnectionFormState,
+    bookmarks: List<Bookmark>,
     serviceState: TeamSpeakServiceState,
     onHostChanged: (String) -> Unit,
     onPortChanged: (String) -> Unit,
     onNicknameChanged: (String) -> Unit,
     onPasswordChanged: (String) -> Unit,
+    onDefaultChannelChanged: (String) -> Unit,
+    onSaveBookmark: () -> Unit,
+    onDeleteBookmark: (String) -> Unit,
+    onApplyBookmark: (Bookmark) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onPlaybackMutedChange: (Boolean) -> Unit,
-    onParticipantMutedChange: (String, Boolean) -> Unit,
-    onParticipantVolumeChange: (String, Int) -> Unit,
     onAudioRouteSelected: (Int) -> Unit,
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
     onJoinChannel: (Int, String) -> Unit,
+    onUpdateNickname: (String) -> Unit,
+    onSetInputMuted: (Boolean) -> Unit,
+    onSetOutputMuted: (Boolean) -> Unit,
+    onSetAway: (String?) -> Unit,
+    onSendChat: (String) -> Unit,
+    onSetMasterVolume: (Float) -> Unit,
+    onChatOpened: () -> Unit = {},
+    onOpenPm: (Int) -> Unit = {},
+    onSendPm: (Int, String) -> Unit = { _, _ -> },
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "TS3 Mobile",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Column {
+                        Text(
+                            text = "ColdTs Client",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                        )
+                        Text(
+                            text = "Ice-cold TeamSpeak",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 },
                 actions = {
+                    if (serviceState.status.phase == ConnectionPhase.CONNECTED &&
+                        serviceState.unreadChat > 0
+                    ) {
+                        BadgedBox(badge = { Badge { Text(serviceState.unreadChat.toString()) } }) {
+                            Icon(Icons.Outlined.ChatBubbleOutline, "Unread messages")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     StatusIndicator(serviceState.status.phase)
                     Spacer(Modifier.width(16.dp))
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
             )
         },
-    ) { contentPadding ->
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(contentPadding),
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                            MaterialTheme.colorScheme.background,
+                        ),
+                    ),
+                )
+                .padding(padding),
         ) {
-            serviceState.status.detail?.let { detail ->
-                StatusMessage(serviceState.status.phase, detail)
-            }
-            serviceState.microphoneError?.let { detail ->
-                StatusMessage(ConnectionPhase.ERROR, detail)
-            }
-            serviceState.channelError?.let { detail ->
-                StatusMessage(ConnectionPhase.ERROR, detail)
-            }
-            serviceState.audioRouting.error?.let { detail ->
-                StatusMessage(ConnectionPhase.ERROR, detail)
+            listOfNotNull(
+                serviceState.status.detail,
+                serviceState.microphoneError,
+                serviceState.channelError,
+                serviceState.audioRouting.error,
+            ).forEach { detail ->
+                StatusMessage(
+                    phase = serviceState.status.phase,
+                    detail = detail,
+                    isError = detail === serviceState.microphoneError ||
+                        detail === serviceState.channelError ||
+                        detail === serviceState.audioRouting.error,
+                )
             }
 
             if (serviceState.status.phase == ConnectionPhase.CONNECTED) {
@@ -164,21 +220,31 @@ fun MainScreen(
                     state = serviceState,
                     onDisconnect = onDisconnect,
                     onPlaybackMutedChange = onPlaybackMutedChange,
-                    onParticipantMutedChange = onParticipantMutedChange,
-                    onParticipantVolumeChange = onParticipantVolumeChange,
                     onAudioRouteSelected = onAudioRouteSelected,
                     onMicrophoneModeChanged = onMicrophoneModeChanged,
                     onPushToTalkChanged = onPushToTalkChanged,
                     onJoinChannel = onJoinChannel,
+                    onUpdateNickname = onUpdateNickname,
+                    onSetInputMuted = onSetInputMuted,
+                    onSetOutputMuted = onSetOutputMuted,
+                    onSetAway = onSetAway,
+                    onSendChat = onSendChat,
+                    onSetMasterVolume = onSetMasterVolume,
+                    onChatOpened = onChatOpened,
                 )
             } else {
                 ConnectionForm(
                     form = form,
+                    bookmarks = bookmarks,
                     phase = serviceState.status.phase,
                     onHostChanged = onHostChanged,
                     onPortChanged = onPortChanged,
                     onNicknameChanged = onNicknameChanged,
                     onPasswordChanged = onPasswordChanged,
+                    onDefaultChannelChanged = onDefaultChannelChanged,
+                    onSaveBookmark = onSaveBookmark,
+                    onDeleteBookmark = onDeleteBookmark,
+                    onApplyBookmark = onApplyBookmark,
                     onConnect = onConnect,
                     onDisconnect = onDisconnect,
                 )
@@ -190,11 +256,16 @@ fun MainScreen(
 @Composable
 private fun ConnectionForm(
     form: ConnectionFormState,
+    bookmarks: List<Bookmark>,
     phase: ConnectionPhase,
     onHostChanged: (String) -> Unit,
     onPortChanged: (String) -> Unit,
     onNicknameChanged: (String) -> Unit,
     onPasswordChanged: (String) -> Unit,
+    onDefaultChannelChanged: (String) -> Unit,
+    onSaveBookmark: () -> Unit,
+    onDeleteBookmark: (String) -> Unit,
+    onApplyBookmark: (Bookmark) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
@@ -202,57 +273,61 @@ private fun ConnectionForm(
         phase == ConnectionPhase.RECONNECTING ||
         phase == ConnectionPhase.DISCONNECTING
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var showBookmarks by rememberSaveable { mutableStateOf(false) }
+
     val invalidHost = form.submitted && form.host.isBlank()
     val invalidPort = form.submitted && (form.port.toIntOrNull() !in 1..65535)
-    val invalidNickname = form.submitted && form.nickname.trim().length !in 3..30
+    val invalidNickname = form.submitted && form.nickname.trim().length !in 2..30
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "连接服务器",
+            text = "Connect to a server",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
+        Text(
+            text = "Enter a domain, IP, or host:port. SRV records are resolved automatically.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(
                 value = form.host,
                 onValueChange = onHostChanged,
                 modifier = Modifier.weight(1f),
                 enabled = !isConnecting,
                 singleLine = true,
-                label = { Text("服务器地址") },
+                label = { Text("Server address") },
                 placeholder = { Text("voice.example.com") },
-                leadingIcon = { Icon(Icons.Outlined.Dns, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Outlined.Dns, null) },
                 isError = invalidHost,
                 supportingText = if (invalidHost) {
-                    { Text("请输入服务器地址") }
-                } else {
-                    null
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    { Text("Enter the server address") }
+                } else null,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Next,
+                ),
             )
             OutlinedTextField(
                 value = form.port,
                 onValueChange = onPortChanged,
-                modifier = Modifier.width(108.dp),
+                modifier = Modifier.width(104.dp),
                 enabled = !isConnecting,
                 singleLine = true,
-                label = { Text("端口") },
+                label = { Text("Port") },
                 isError = invalidPort,
                 supportingText = if (invalidPort) {
                     { Text("1–65535") }
                 } else {
-                    null
+                    { Text("9987") }
                 },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,
@@ -267,14 +342,12 @@ private fun ConnectionForm(
             modifier = Modifier.fillMaxWidth(),
             enabled = !isConnecting,
             singleLine = true,
-            label = { Text("昵称") },
-            leadingIcon = { Icon(Icons.Outlined.AlternateEmail, contentDescription = null) },
+            label = { Text("Nickname") },
+            leadingIcon = { Icon(Icons.Outlined.AlternateEmail, null) },
             isError = invalidNickname,
             supportingText = if (invalidNickname) {
-                { Text("昵称需要 3–30 个字符") }
-            } else {
-                null
-            },
+                { Text("Nickname must be 2–30 characters") }
+            } else null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
         )
 
@@ -284,27 +357,79 @@ private fun ConnectionForm(
             modifier = Modifier.fillMaxWidth(),
             enabled = !isConnecting,
             singleLine = true,
-            label = { Text("服务器密码（可选）") },
-            leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+            label = { Text("Server password (optional)") },
+            leadingIcon = { Icon(Icons.Outlined.Lock, null) },
             trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                IconButton({ passwordVisible = !passwordVisible }) {
                     Icon(
-                        imageVector = if (passwordVisible) {
-                            Icons.Outlined.VisibilityOff
-                        } else {
-                            Icons.Outlined.Visibility
-                        },
-                        contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                        if (passwordVisible) Icons.Outlined.VisibilityOff
+                        else Icons.Outlined.Visibility,
+                        if (passwordVisible) "Hide password" else "Show password",
                     )
                 }
             },
-            visualTransformation = if (passwordVisible) {
-                VisualTransformation.None
-            } else {
-                PasswordVisualTransformation()
-            },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            visualTransformation = if (passwordVisible) VisualTransformation.None
+            else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
         )
+
+        OutlinedTextField(
+            value = form.defaultChannel,
+            onValueChange = onDefaultChannelChanged,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isConnecting,
+            singleLine = true,
+            label = { Text("Default channel (optional)") },
+            placeholder = { Text("Lobby / Support") },
+            leadingIcon = { Icon(Icons.Outlined.Tag, null) },
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(
+                onClick = onSaveBookmark,
+                enabled = form.host.isNotBlank() && !isConnecting,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Outlined.BookmarkAdd, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Save bookmark")
+            }
+            OutlinedButton(
+                onClick = { showBookmarks = !showBookmarks },
+                enabled = bookmarks.isNotEmpty(),
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Outlined.Bookmark, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Bookmarks (${bookmarks.size})")
+            }
+        }
+
+        if (showBookmarks) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            ) {
+                if (bookmarks.isEmpty()) {
+                    Text(
+                        "No bookmarks yet.",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    bookmarks.forEach { bookmark ->
+                        BookmarkRow(
+                            bookmark = bookmark,
+                            enabled = !isConnecting,
+                            onApply = { onApplyBookmark(bookmark) },
+                            onDelete = { onDeleteBookmark(bookmark.id) },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(4.dp))
 
@@ -317,19 +442,16 @@ private fun ConnectionForm(
                 enabled = phase != ConnectionPhase.DISCONNECTING,
             ) {
                 if (phase != ConnectionPhase.DISCONNECTING) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                    )
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
                 }
-                Icon(Icons.Default.PowerSettingsNew, contentDescription = null)
+                Icon(Icons.Default.PowerSettingsNew, null)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     when (phase) {
-                        ConnectionPhase.RECONNECTING -> "取消重连"
-                        ConnectionPhase.DISCONNECTING -> "正在断开"
-                        else -> "取消连接"
+                        ConnectionPhase.RECONNECTING -> "Cancel reconnect"
+                        ConnectionPhase.DISCONNECTING -> "Disconnecting"
+                        else -> "Cancel connection"
                     },
                 )
             }
@@ -338,12 +460,73 @@ private fun ConnectionForm(
                 onClick = onConnect,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(54.dp),
+                shape = RoundedCornerShape(16.dp),
             ) {
-                Icon(Icons.Default.Link, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(if (phase == ConnectionPhase.ERROR) "重新连接" else "连接")
+                Icon(Icons.Default.Link, null)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (phase == ConnectionPhase.ERROR) "Reconnect" else "Connect",
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        if (bookmarks.isNotEmpty()) {
+            Text(
+                "Quick connect",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            bookmarks.take(6).forEach { bookmark ->
+                BookmarkRow(
+                    bookmark = bookmark,
+                    enabled = !isConnecting,
+                    onApply = {
+                        onApplyBookmark(bookmark)
+                        onConnect()
+                    },
+                    onDelete = { onDeleteBookmark(bookmark.id) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Powered by ColdGame · coldgame.ir",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
+    }
+}
+
+@Composable
+private fun BookmarkRow(
+    bookmark: Bookmark,
+    enabled: Boolean,
+    onApply: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(bookmark.label, fontWeight = FontWeight.SemiBold)
+            Text(
+                bookmark.displayHost +
+                    (bookmark.nickname.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onApply, enabled = enabled) { Text("Use") }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Outlined.Delete, "Delete bookmark", tint = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -353,21 +536,51 @@ private fun ConnectedContent(
     state: TeamSpeakServiceState,
     onDisconnect: () -> Unit,
     onPlaybackMutedChange: (Boolean) -> Unit,
-    onParticipantMutedChange: (String, Boolean) -> Unit,
-    onParticipantVolumeChange: (String, Int) -> Unit,
     onAudioRouteSelected: (Int) -> Unit,
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
     onJoinChannel: (Int, String) -> Unit,
+    onUpdateNickname: (String) -> Unit,
+    onSetInputMuted: (Boolean) -> Unit,
+    onSetOutputMuted: (Boolean) -> Unit,
+    onSetAway: (String?) -> Unit,
+    onSendChat: (String) -> Unit,
+    onSetMasterVolume: (Float) -> Unit,
+    onChatOpened: () -> Unit = {},
+    onSendPm: (Int, String) -> Unit = { _, _ -> },
 ) {
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var nicknameEditorOpen by rememberSaveable { mutableStateOf(false) }
+    var pmPeerId by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    // If an inbound PM opens a peer, react
+    LaunchedEffect(state.chatMessages.size) {
+        state.chatMessages
+            .lastOrNull { it.target == io.github.ts3mobile.protocol.ChatMessage.Target.PRIVATE && !it.isOwn }
+            ?.let { if (pmPeerId == null && it.peerId != null) pmPeerId = it.peerId }
+    }
+
+    pmPeerId?.let { peerId ->
+        val peer = state.snapshot.participants.firstOrNull { it.id == peerId }
+        PrivateChatSheet(
+            peerName = peer?.nickname ?: "User $peerId",
+            messages = state.chatMessages.filter {
+                it.target == io.github.ts3mobile.protocol.ChatMessage.Target.PRIVATE &&
+                    ((it.isOwn && it.peerId == peerId) || (!it.isOwn && it.peerId == peerId))
+            },
+            onDismiss = { pmPeerId = null },
+            onSend = { onSendPm(peerId, it) },
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)) {
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            tonalElevation = 2.dp,
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
@@ -379,8 +592,8 @@ private fun ConnectedContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "${state.snapshot.channels.size} 个频道 · " +
-                            "${state.snapshot.participants.size} 人在线 · " +
+                        text = "${state.snapshot.channels.size} channels · " +
+                            "${state.snapshot.participants.size} online · " +
                             state.audioRouting.selectedRoute.label,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -388,53 +601,47 @@ private fun ConnectedContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                AudioRouteMenu(
-                    routing = state.audioRouting,
-                    onRouteSelected = onAudioRouteSelected,
-                )
-                IconButton(onClick = { onPlaybackMutedChange(!state.playbackMuted) }) {
+                AudioRouteMenu(state.audioRouting, onAudioRouteSelected)
+                IconButton({ nicknameEditorOpen = true }) {
+                    Icon(Icons.Outlined.Edit, "Profile and away")
+                }
+                IconButton({ onSetInputMuted(!state.inputMuted) }) {
                     Icon(
-                        imageVector = if (state.playbackMuted) {
-                            Icons.AutoMirrored.Outlined.VolumeOff
-                        } else {
-                            Icons.AutoMirrored.Outlined.VolumeUp
-                        },
-                        contentDescription = if (state.playbackMuted) "打开扬声器" else "静音扬声器",
+                        if (state.inputMuted) Icons.Outlined.MicOff else Icons.Filled.Mic,
+                        if (state.inputMuted) "Unmute microphone" else "Mute microphone",
+                        tint = if (state.inputMuted) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface,
                     )
                 }
-                IconButton(onClick = onDisconnect) {
-                    Icon(Icons.Default.PowerSettingsNew, contentDescription = "断开连接")
+                IconButton({
+                    onSetOutputMuted(!state.outputMuted)
+                    onPlaybackMutedChange(!state.outputMuted)
+                }) {
+                    Icon(
+                        if (state.outputMuted) Icons.AutoMirrored.Outlined.VolumeOff
+                        else Icons.AutoMirrored.Outlined.VolumeUp,
+                        if (state.outputMuted) "Unmute" else "Mute",
+                    )
+                }
+                IconButton(onDisconnect) {
+                    Icon(Icons.Default.PowerSettingsNew, "Disconnect")
                 }
             }
         }
 
-        TabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("频道") },
-                icon = { Icon(Icons.Outlined.Tag, contentDescription = null) },
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text("用户") },
-                icon = { Icon(Icons.Outlined.Groups, contentDescription = null) },
-            )
-        }
+        ChannelList(state, onJoinChannel, { pmPeerId = it }, Modifier.weight(1f))
 
-        Box(Modifier.weight(1f)) {
-            if (selectedTab == 0) {
-                ChannelList(state, onJoinChannel)
-            } else {
-                ParticipantList(
-                    state = state,
-                    onMutedChange = onParticipantMutedChange,
-                    onVolumeChange = onParticipantVolumeChange,
-                )
-            }
-        }
-
+        val currentChannelId = state.snapshot.currentChannelId
+        val currentChannelName = state.snapshot.channels
+            .firstOrNull { it.id == currentChannelId }?.name ?: "Server"
+        ChatPanel(
+            messages = state.chatMessages,
+            unread = state.unreadChat,
+            currentChannelId = currentChannelId,
+            currentChannelName = currentChannelName,
+            onSend = onSendChat,
+            onOpened = onChatOpened,
+        )
         MicrophoneControl(
             mode = state.microphoneMode,
             isTransmitting = state.isTransmitting,
@@ -442,46 +649,229 @@ private fun ConnectedContent(
             onPushToTalkChanged = onPushToTalkChanged,
         )
     }
+
+    if (nicknameEditorOpen) {
+        NicknameEditor(
+            initial = state.snapshot.participants
+                .firstOrNull { it.id == state.snapshot.ownClientId }
+                ?.nickname
+                ?: "",
+            onDismiss = { nicknameEditorOpen = false },
+            initialAway = state.away,
+            onConfirm = { nick, away, awayMessage ->
+                if (nick.isNotBlank()) onUpdateNickname(nick)
+                onSetAway(if (away) awayMessage.ifBlank { "Away" } else null)
+                nicknameEditorOpen = false
+            },
+        )
+    }
 }
 
 @Composable
-private fun AudioRouteMenu(
-    routing: AudioRoutingState,
-    onRouteSelected: (Int) -> Unit,
+private fun NicknameEditor(
+    initial: String,
+    initialAway: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (nick: String, away: Boolean, awayMessage: String) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var value by rememberSaveable(initial) { mutableStateOf(initial) }
+    var away by rememberSaveable { mutableStateOf(initialAway) }
+    var awayMessage by rememberSaveable { mutableStateOf("Away") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Profile") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    singleLine = true,
+                    label = { Text("Nickname") },
+                    leadingIcon = { Icon(Icons.Outlined.Person, null) },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(checked = away, onCheckedChange = { away = it })
+                    Text("Set yourself as away")
+                }
+                if (away) {
+                    OutlinedTextField(
+                        value = awayMessage,
+                        onValueChange = { awayMessage = it },
+                        singleLine = true,
+                        label = { Text("Away message") },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(value.trim(), away, awayMessage.trim()) },
+                enabled = value.trim().length in 2..30,
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
+    )
+}
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChatPanel(
+    messages: List<ChatMessage>,
+    unread: Int,
+    currentChannelId: Int?,
+    currentChannelName: String,
+    onSend: (String) -> Unit,
+    onOpened: () -> Unit,
+) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    var text by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(messages.size, open) {
+        if (open) {
+            onOpened()
+            if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    Surface(tonalElevation = 2.dp) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .combinedClickable(
+                        onClick = { open = !open },
+                    )
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (open) "Hide chat" else "Chat: $currentChannelName",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                if (unread > 0 && !open) {
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ) { Text(unread.toString()) }
+                    Spacer(Modifier.width(8.dp))
+                }
+                Icon(
+                    if (open) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight,
+                    if (open) "Hide" else "Show",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (open) {
+                val channelMessages = messages.filter {
+                    it.target != ChatMessage.Target.PRIVATE &&
+                        (it.channelId == null || it.channelId == currentChannelId)
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                ) {
+                    if (channelMessages.isEmpty()) {
+                        Text(
+                            "No messages yet.",
+                            Modifier.align(Alignment.Center),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            items(channelMessages) { message ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (message.isOwn)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.surface,
+                                    tonalElevation = 1.dp,
+                                ) {
+                                    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                        Text(
+                                            message.author,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (message.isOwn)
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.primary,
+                                        )
+                                        Text(
+                                            message.text,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Row(
+                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("Message this channel") },
+                        shape = RoundedCornerShape(20.dp),
+                    )
+                    Button(
+                        onClick = {
+                            if (text.isNotBlank()) {
+                                onSend(text.trim())
+                                text = ""
+                            }
+                        },
+                        enabled = text.isNotBlank(),
+                        shape = CircleShape,
+                    ) {
+                        Text("Send")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioRouteMenu(routing: AudioRoutingState, onRouteSelected: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }) {
+        IconButton({ expanded = true }) {
             Icon(
                 Icons.Outlined.Headphones,
-                contentDescription = "选择音频设备，当前为${routing.selectedRoute.label}",
+                "Select audio device, currently ${routing.selectedRoute.label}",
             )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
+        DropdownMenu(expanded, { expanded = false }) {
             routing.routes.forEach { route ->
                 val selected = route.id == routing.selectedRouteId
                 DropdownMenuItem(
                     text = {
-                        Text(
-                            text = route.label,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Text(route.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     onClick = {
                         expanded = false
                         onRouteSelected(route.id)
                     },
                     leadingIcon = {
-                        if (selected) {
-                            Icon(Icons.Outlined.Check, contentDescription = null)
-                        } else {
-                            Spacer(Modifier.size(24.dp))
-                        }
+                        if (selected) Icon(Icons.Outlined.CheckCircle, null)
+                        else Spacer(Modifier.size(24.dp))
                     },
                 )
             }
@@ -497,7 +887,7 @@ private fun MicrophoneControl(
     onMicrophoneModeChanged: (MicrophoneMode) -> Unit,
     onPushToTalkChanged: (Boolean) -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)) {
+    Surface(tonalElevation = 3.dp) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -511,54 +901,44 @@ private fun MicrophoneControl(
                         selected = mode == option,
                         onClick = { onMicrophoneModeChanged(option) },
                         shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = MicrophoneMode.entries.size,
+                            index,
+                            MicrophoneMode.entries.size,
                         ),
                     ) {
                         Text(
                             when (option) {
-                                MicrophoneMode.OFF -> "关闭"
-                                MicrophoneMode.PUSH_TO_TALK -> "按住"
-                                MicrophoneMode.CONTINUOUS -> "常开"
+                                MicrophoneMode.OFF -> "Off"
+                                MicrophoneMode.PUSH_TO_TALK -> "Push"
+                                MicrophoneMode.CONTINUOUS -> "Always on"
                             },
                         )
                     }
                 }
             }
-
             when (mode) {
                 MicrophoneMode.PUSH_TO_TALK -> PushToTalkButton(
-                    isTransmitting = isTransmitting,
-                    onPushToTalkChanged = onPushToTalkChanged,
+                    isTransmitting,
+                    onPushToTalkChanged,
                 )
-
                 MicrophoneMode.OFF,
                 MicrophoneMode.CONTINUOUS,
                 -> Row(
-                    modifier = Modifier.height(58.dp),
+                    Modifier.height(58.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Icon(
-                        imageVector = if (mode == MicrophoneMode.OFF) {
-                            Icons.Outlined.MicOff
-                        } else {
-                            Icons.Filled.Mic
-                        },
+                        imageVector = if (mode == MicrophoneMode.OFF) Icons.Outlined.MicOff
+                        else Icons.Filled.Mic,
                         contentDescription = null,
-                        tint = if (isTransmitting) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        tint = if (isTransmitting) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = if (mode == MicrophoneMode.OFF) {
-                            "麦克风已关闭"
-                        } else if (isTransmitting) {
-                            "麦克风常开中"
-                        } else {
-                            "正在启动麦克风"
+                        when {
+                            mode == MicrophoneMode.OFF -> "Microphone is off"
+                            isTransmitting -> "Microphone is live"
+                            else -> "Starting microphone"
                         },
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -574,15 +954,20 @@ private fun PushToTalkButton(
     onPushToTalkChanged: (Boolean) -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
-    val currentPushToTalkChanged by rememberUpdatedState(onPushToTalkChanged)
+    val current by rememberUpdatedState(onPushToTalkChanged)
     val active = pressed || isTransmitting
+    val color by animateColorAsState(
+        targetValue = if (active) MaterialTheme.colorScheme.error
+        else MaterialTheme.colorScheme.primary,
+        label = "ptt",
+    )
 
     Surface(
         modifier = Modifier
-            .size(58.dp)
+            .size(72.dp)
             .semantics {
                 role = Role.Button
-                contentDescription = if (active) "正在说话" else "按住说话"
+                contentDescription = if (active) "Speaking" else "Hold to talk"
                 onClick {
                     onPushToTalkChanged(!isTransmitting)
                     true
@@ -592,34 +977,20 @@ private fun PushToTalkButton(
                 awaitEachGesture {
                     awaitFirstDown()
                     pressed = true
-                    currentPushToTalkChanged(true)
-                    try {
-                        waitForUpOrCancellation()
-                    } finally {
+                    current(true)
+                    try { waitForUpOrCancellation() } finally {
                         pressed = false
-                        currentPushToTalkChanged(false)
+                        current(false)
                     }
                 }
             },
         shape = CircleShape,
-        color = if (active) {
-            MaterialTheme.colorScheme.error
-        } else {
-            MaterialTheme.colorScheme.primary
-        },
-        contentColor = if (active) {
-            MaterialTheme.colorScheme.onError
-        } else {
-            MaterialTheme.colorScheme.onPrimary
-        },
-        shadowElevation = 2.dp,
+        color = color,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shadowElevation = 6.dp,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Filled.Mic,
-                contentDescription = null,
-                modifier = Modifier.size(28.dp),
-            )
+            Icon(Icons.Filled.Mic, null, Modifier.size(32.dp))
         }
     }
 }
@@ -629,23 +1000,28 @@ private fun PushToTalkButton(
 private fun ChannelList(
     state: TeamSpeakServiceState,
     onJoinChannel: (Int, String) -> Unit,
+    onOpenPm: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var passwordChannel by remember { mutableStateOf<io.github.ts3mobile.protocol.Ts3Channel?>(null) }
     var channelPassword by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
-    var expandedChannelIds by rememberSaveable { mutableStateOf(intArrayOf()) }
-    val currentChannelId = state.snapshot.currentChannelId
-    val rows = remember(state.snapshot.channels) {
-        ChannelTree.flatten(state.snapshot.channels)
+    var expandedIds by rememberSaveable { mutableStateOf(intArrayOf()) }
+    val current = state.snapshot.currentChannelId
+    val rows = remember(state.snapshot.channels) { ChannelTree.flatten(state.snapshot.channels) }
+    val byChannel = remember(state.snapshot.participants) {
+        state.snapshot.participants.groupBy { it.channelId }
     }
-    val participantsByChannel = remember(state.snapshot.participants) {
-        state.snapshot.participants.groupBy(Ts3Participant::channelId)
+    // Channels are open by default so member counts and spacer channels
+    // are visible immediately without tapping every row.
+    LaunchedEffect(rows) {
+        if (expandedIds.isEmpty()) {
+            expandedIds = rows.map { it.channel.id }.toIntArray()
+        }
     }
 
-    LaunchedEffect(currentChannelId) {
-        if (currentChannelId != null && currentChannelId !in expandedChannelIds) {
-            expandedChannelIds += currentChannelId
-        }
+    LaunchedEffect(current) {
+        if (current != null && current !in expandedIds) expandedIds += current
     }
 
     passwordChannel?.let { channel ->
@@ -653,97 +1029,76 @@ private fun ChannelList(
             onDismissRequest = {
                 passwordChannel = null
                 channelPassword = ""
-                passwordVisible = false
             },
-            title = { Text("加入“${channel.name}”") },
+            title = { Text("Join \u201C${channel.name}\u201D") },
             text = {
                 OutlinedTextField(
                     value = channelPassword,
                     onValueChange = { channelPassword = it },
                     singleLine = true,
-                    label = { Text("频道密码") },
-                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                    label = { Text("Channel password") },
+                    leadingIcon = { Icon(Icons.Outlined.Lock, null) },
                     trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        IconButton({ passwordVisible = !passwordVisible }) {
                             Icon(
-                                imageVector = if (passwordVisible) {
-                                    Icons.Outlined.VisibilityOff
-                                } else {
-                                    Icons.Outlined.Visibility
-                                },
-                                contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                                if (passwordVisible) Icons.Outlined.VisibilityOff
+                                else Icons.Outlined.Visibility,
+                                if (passwordVisible) "Hide" else "Show",
                             )
                         }
                     },
-                    visualTransformation = if (passwordVisible) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None
+                    else PasswordVisualTransformation(),
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        onJoinChannel(channel.id, channelPassword)
-                        passwordChannel = null
-                        channelPassword = ""
-                        passwordVisible = false
-                    },
-                ) {
-                    Text("加入")
-                }
+                TextButton({
+                    onJoinChannel(channel.id, channelPassword)
+                    passwordChannel = null
+                    channelPassword = ""
+                }) { Text("Join") }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        passwordChannel = null
-                        channelPassword = ""
-                        passwordVisible = false
-                    },
-                ) {
-                    Text("取消")
-                }
+                TextButton({
+                    passwordChannel = null
+                    channelPassword = ""
+                }) { Text("Cancel") }
             },
         )
     }
 
     if (rows.isEmpty()) {
-        EmptyList("没有可见频道")
+        EmptyState("No visible channels", Icons.Outlined.Tag)
         return
     }
 
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(modifier.fillMaxSize()) {
         items(rows, key = { it.channel.id }) { row ->
-            val isCurrent = row.channel.id == currentChannelId
+            val isCurrent = row.channel.id == current
             val isSwitching = row.channel.id == state.switchingChannelId
-            val participants = participantsByChannel[row.channel.id].orEmpty()
-            val isExpanded = row.channel.id in expandedChannelIds
+            val isExpanded = row.channel.id in expandedIds
+            val participants = byChannel[row.channel.id].orEmpty()
             Column(Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            if (isCurrent) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            },
+                            if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.surface,
                         )
                         .combinedClickable(
-                            onClickLabel = if (isExpanded) "折叠频道" else "展开频道",
+                            onClickLabel = if (isExpanded) "Collapse" else "Expand",
                             onClick = {
-                                expandedChannelIds = if (isExpanded) {
-                                    expandedChannelIds.filterNot { it == row.channel.id }.toIntArray()
+                                expandedIds = if (isExpanded) {
+                                    expandedIds.filterNot { it == row.channel.id }.toIntArray()
                                 } else {
-                                    expandedChannelIds + row.channel.id
+                                    expandedIds + row.channel.id
                                 }
                             },
                             onDoubleClick = {
                                 if (!isCurrent && state.switchingChannelId == null) {
                                     if (row.channel.hasPassword) {
                                         channelPassword = ""
-                                        passwordVisible = false
                                         passwordChannel = row.channel
                                     } else {
                                         onJoinChannel(row.channel.id, "")
@@ -759,36 +1114,29 @@ private fun ChannelList(
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = if (isExpanded) {
-                            Icons.Outlined.KeyboardArrowDown
-                        } else {
-                            Icons.Outlined.KeyboardArrowRight
-                        },
-                        contentDescription = if (isExpanded) "已展开" else "已折叠",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (participants.isNotEmpty() || row.channel.clientCount > 0) {
+                        Icon(
+                            if (isExpanded) Icons.Outlined.KeyboardArrowDown
+                            else Icons.Outlined.KeyboardArrowRight,
+                            if (isExpanded) "Collapse" else "Expand",
+                            Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Spacer(Modifier.size(20.dp))
+                    }
                     Spacer(Modifier.width(8.dp))
                     Icon(
-                        imageVector = if (row.channel.hasPassword) Icons.Outlined.Lock else Icons.Outlined.Tag,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = if (row.channel.isDefault || isCurrent) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        if (row.channel.hasPassword) Icons.Outlined.Lock else Icons.Outlined.Tag,
+                        null,
+                        Modifier.size(20.dp),
+                        tint = if (row.channel.isDefault || isCurrent) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(10.dp))
+                    Text(row.channel.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        text = row.channel.name,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = row.channel.clientCount.toString(),
+                        row.channel.clientCount.toString(),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -796,43 +1144,44 @@ private fun ChannelList(
                         Spacer(Modifier.width(10.dp))
                         Icon(
                             Icons.Outlined.CheckCircle,
-                            contentDescription = "当前频道",
-                            modifier = Modifier.size(20.dp),
+                            "Current channel",
+                            Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     } else if (isSwitching) {
                         Spacer(Modifier.width(10.dp))
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
                 }
                 if (isExpanded) {
-                    participants.forEach { participant ->
+                    participants.forEach { p ->
                         ChannelParticipantRow(
-                            participant = participant,
-                            isOwnClient = participant.id == state.snapshot.ownClientId,
+                            p,
+                            isOwnClient = p.id == state.snapshot.ownClientId,
                             depth = row.depth,
+                            onClick = { if (p.id != state.snapshot.ownClientId) onOpenPm(p.id) },
                         )
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChannelParticipantRow(
-    participant: Ts3Participant,
+    p: Ts3Participant,
     isOwnClient: Boolean,
     depth: Int,
+    onClick: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .combinedClickable(onClick = onClick)
             .padding(
                 start = (48 + depth * 20).coerceAtMost(112).dp,
                 end = 16.dp,
@@ -841,232 +1190,187 @@ private fun ChannelParticipantRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = when {
-                participant.isTalking -> Icons.Outlined.GraphicEq
-                participant.isInputMuted -> Icons.Outlined.MicOff
-                participant.isOutputMuted -> Icons.AutoMirrored.Outlined.VolumeOff
-                else -> Icons.Outlined.Person
-            },
-            contentDescription = when {
-                participant.isTalking -> "正在说话"
-                participant.isInputMuted -> "麦克风静音"
-                participant.isOutputMuted -> "扬声器静音"
-                else -> null
-            },
-            modifier = Modifier.size(19.dp),
-            tint = if (participant.isTalking) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
+        ParticipantIcon(p, Modifier.size(19.dp))
         Spacer(Modifier.width(10.dp))
         Text(
-            text = participant.nickname,
-            modifier = Modifier.weight(1f),
+            p.nickname,
+            Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (isOwnClient) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (isOwnClient) {
-            Text(
-                text = "我",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+            Text("Me", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+@Composable
+private fun ParticipantIcon(p: Ts3Participant, modifier: Modifier = Modifier) {
+    Icon(
+        imageVector = when {
+            p.isTalking -> Icons.Outlined.GraphicEq
+            p.isInputMuted -> Icons.Outlined.MicOff
+            p.isOutputMuted -> Icons.AutoMirrored.Outlined.VolumeOff
+            else -> Icons.Outlined.Person
+        },
+        contentDescription = when {
+            p.isTalking -> "Speaking"
+            p.isInputMuted -> "Microphone muted"
+            p.isOutputMuted -> "Speaker muted"
+            else -> null
+        },
+        modifier = modifier,
+        tint = if (p.isTalking) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun EmptyState(label: String, icon: ImageVector) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                icon,
+                null,
+                Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
+            Spacer(Modifier.height(12.dp))
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-}
-
-@Composable
-private fun ParticipantList(
-    state: TeamSpeakServiceState,
-    onMutedChange: (String, Boolean) -> Unit,
-    onVolumeChange: (String, Int) -> Unit,
-) {
-    val channelsById = remember(state.snapshot.channels) {
-        state.snapshot.channels.associateBy { it.id }
-    }
-    var expandedKey by remember { mutableStateOf<String?>(null) }
-    if (state.snapshot.participants.isEmpty()) {
-        EmptyList("没有可见用户")
-        return
-    }
-
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(state.snapshot.participants, key = { it.audioControlKey() }) { participant ->
-            val key = participant.audioControlKey()
-            val settings = state.participantAudioSettings[key] ?: ParticipantAudioSettings()
-            val isOwnClient = participant.id == state.snapshot.ownClientId
-            Column(Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 18.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = when {
-                            participant.isTalking -> Icons.Outlined.GraphicEq
-                            participant.isInputMuted -> Icons.Outlined.MicOff
-                            participant.isOutputMuted -> Icons.AutoMirrored.Outlined.VolumeOff
-                            else -> Icons.Outlined.Person
-                        },
-                        contentDescription = null,
-                        tint = if (participant.isTalking) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = participant.nickname,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = participantAudioDetail(
-                                channelName = channelsById[participant.channelId]?.name.orEmpty(),
-                                settings = settings,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (!isOwnClient) {
-                        IconButton(onClick = { onMutedChange(key, !settings.muted) }) {
-                            Icon(
-                                imageVector = if (settings.muted) {
-                                    Icons.AutoMirrored.Outlined.VolumeOff
-                                } else {
-                                    Icons.AutoMirrored.Outlined.VolumeUp
-                                },
-                                contentDescription = if (settings.muted) {
-                                    "取消静音${participant.nickname}"
-                                } else {
-                                    "静音${participant.nickname}"
-                                },
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                expandedKey = if (expandedKey == key) null else key
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Tune,
-                                contentDescription = "调整${participant.nickname}的音量",
-                                tint = if (settings.volumePercent != 100) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                        }
-                    }
-                }
-                if (!isOwnClient && expandedKey == key) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .padding(start = 54.dp, end = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Slider(
-                            value = settings.volumePercent.toFloat(),
-                            onValueChange = { value ->
-                                val volume = (value / 5f).roundToInt() * 5
-                                onVolumeChange(key, volume)
-                            },
-                            modifier = Modifier.weight(1f),
-                            valueRange = 0f..200f,
-                            steps = 39,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            text = "${settings.volumePercent}%",
-                            modifier = Modifier.width(52.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
-        }
-    }
-}
-
-private fun participantAudioDetail(
-    channelName: String,
-    settings: ParticipantAudioSettings,
-): String = when {
-    settings.muted -> "$channelName · 已静音"
-    settings.volumePercent != 100 -> "$channelName · ${settings.volumePercent}%"
-    else -> channelName
-}
-
-@Composable
-private fun EmptyList(label: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun StatusIndicator(phase: ConnectionPhase) {
     val (label, color) = when (phase) {
-        ConnectionPhase.DISCONNECTED -> "未连接" to MaterialTheme.colorScheme.outline
-        ConnectionPhase.CONNECTING -> "连接中" to MaterialTheme.colorScheme.tertiary
-        ConnectionPhase.RECONNECTING -> "重连中" to MaterialTheme.colorScheme.tertiary
-        ConnectionPhase.CONNECTED -> "已连接" to MaterialTheme.colorScheme.primary
-        ConnectionPhase.DISCONNECTING -> "断开中" to MaterialTheme.colorScheme.tertiary
-        ConnectionPhase.ERROR -> "连接失败" to MaterialTheme.colorScheme.error
+        ConnectionPhase.DISCONNECTED -> "Offline" to MaterialTheme.colorScheme.outline
+        ConnectionPhase.CONNECTING -> "Connecting" to MaterialTheme.colorScheme.tertiary
+        ConnectionPhase.RECONNECTING -> "Reconnecting" to MaterialTheme.colorScheme.tertiary
+        ConnectionPhase.CONNECTED -> "Connected" to MaterialTheme.colorScheme.primary
+        ConnectionPhase.DISCONNECTING -> "Disconnecting" to MaterialTheme.colorScheme.tertiary
+        ConnectionPhase.ERROR -> "Failed" to MaterialTheme.colorScheme.error
     }
-
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier
-                .size(8.dp)
-                .background(color, CircleShape),
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color),
         )
         Spacer(Modifier.width(7.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
-private fun StatusMessage(phase: ConnectionPhase, detail: String) {
-    val background = if (phase == ConnectionPhase.ERROR) {
-        MaterialTheme.colorScheme.errorContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val foreground = if (phase == ConnectionPhase.ERROR) {
-        MaterialTheme.colorScheme.onErrorContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
+private fun StatusMessage(phase: ConnectionPhase, detail: String, isError: Boolean = false) {
+    val error = phase == ConnectionPhase.ERROR || isError
+    val bg = if (error) MaterialTheme.colorScheme.errorContainer
+    else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (error) MaterialTheme.colorScheme.onErrorContainer
+    else MaterialTheme.colorScheme.onSurfaceVariant
     Text(
-        text = detail,
+        detail,
         modifier = Modifier
             .fillMaxWidth()
-            .background(background)
+            .background(bg)
             .padding(horizontal = 20.dp, vertical = 10.dp),
-        color = foreground,
+        color = fg,
         style = MaterialTheme.typography.bodySmall,
-        maxLines = 3,
+        maxLines = 4,
         overflow = TextOverflow.Ellipsis,
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PrivateChatSheet(
+    peerName: String,
+    messages: List<io.github.ts3mobile.protocol.ChatMessage>,
+    onDismiss: () -> Unit,
+    onSend: (String) -> Unit,
+) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .height(420.dp)
+                .padding(horizontal = 12.dp),
+        ) {
+            Text(
+                peerName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.weight(1f)) {
+                if (messages.isEmpty()) {
+                    Text(
+                        "No private messages yet. Say hi 👋",
+                        Modifier.align(Alignment.Center),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(messages) { m ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (m.isOwn) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(Modifier.padding(10.dp)) {
+                                    Text(
+                                        if (m.isOwn) "You" else m.author,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(m.text, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.padding(bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text("Message $peerName") },
+                    shape = RoundedCornerShape(20.dp),
+                )
+                Button(
+                    onClick = {
+                        if (text.isNotBlank()) {
+                            onSend(text.trim())
+                            text = ""
+                        }
+                    },
+                    enabled = text.isNotBlank(),
+                    shape = CircleShape,
+                ) { Text("Send") }
+            }
+        }
+    }
 }

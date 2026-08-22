@@ -5,16 +5,49 @@ data class ServerConfig(
     val port: Int = 9987,
     val nickname: String,
     val password: String = "",
+    val defaultChannel: String = "",
 ) {
-    fun normalized(): ServerConfig = copy(
-        host = host.trim(),
-        nickname = nickname.trim(),
-    )
+    /**
+     * Host input may contain a port ("voice.example.com:9988") or a TeamSpeak
+     * TSDNS/SRV hostname without one. When an explicit port is present in the
+     * host field it overrides [port], matching how users paste addresses.
+     */
+    fun normalized(): ServerConfig {
+        val rawHost = host.trim()
+        val hostOnly: String
+        val portFromHost: Int?
+        if (rawHost.startsWith("[")) {
+            val end = rawHost.indexOf(']')
+            if (end > 1 && ':' in rawHost.substring(end)) {
+                hostOnly = rawHost.substring(1, end)
+                portFromHost = rawHost.substringAfterLast(':').toIntOrNull()
+            } else {
+                hostOnly = rawHost
+                portFromHost = null
+            }
+        } else {
+            // Only the last colon separates host from port for IPv4/hostnames.
+            val colon = rawHost.lastIndexOf(':')
+            if (colon > 0 && !rawHost.substring(colon + 1).contains('/')) {
+                hostOnly = rawHost.substring(0, colon)
+                portFromHost = rawHost.substring(colon + 1).toIntOrNull()
+            } else {
+                hostOnly = rawHost
+                portFromHost = null
+            }
+        }
+        return copy(
+            host = hostOnly,
+            port = portFromHost ?: port,
+            nickname = nickname.trim(),
+            defaultChannel = defaultChannel.trim(),
+        )
+    }
 
     fun validationError(): String? = when {
         host.trim().isEmpty() -> "Server address is required"
         port !in 1..65535 -> "Port must be between 1 and 65535"
-        nickname.trim().length !in 3..30 -> "Nickname must contain 3 to 30 characters"
+        nickname.trim().length !in 2..30 -> "Nickname must contain 2 to 30 characters"
         else -> null
     }
 }

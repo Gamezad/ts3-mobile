@@ -177,14 +177,15 @@ class TeamSpeakService : Service() {
 
         val selectedMicrophoneMode = mutableState.value.microphoneMode
         val selectedPlaybackMuted = mutableState.value.playbackMuted
+        val selectedRouting = mutableState.value.audioRouting
         audioPlayer.replaceParticipantGains(emptyMap())
         pushToTalkPressed.set(false)
         mutableState.value = TeamSpeakServiceState(
+            audioRouting = selectedRouting,
             status = ConnectionStatus(ConnectionPhase.CONNECTING),
             serverLabel = "${config.host}:${config.port}",
             microphoneMode = selectedMicrophoneMode,
             playbackMuted = selectedPlaybackMuted,
-            audioRouting = mutableState.value.audioRouting,
         )
         if (session != null) session?.close()
 
@@ -267,7 +268,7 @@ class TeamSpeakService : Service() {
                     status = if (reconnecting) {
                         ConnectionStatus(
                             ConnectionPhase.RECONNECTING,
-                            "重连失败：${status.detail.orEmpty()}".trimEnd('：'),
+                            "Reconnect failed: ${status.detail.orEmpty()}".trimEnd(':'),
                             retryable = status.retryable,
                         )
                     } else {
@@ -370,6 +371,68 @@ class TeamSpeakService : Service() {
         override fun onVoiceFrame(frame: VoiceFrame) {
             if (isListenerActive(this) && connected) audioPlayer.submit(frame)
         }
+
+        override fun onChatMessage(message: io.github.ts3mobile.protocol.ChatMessage) {
+            if (!isListenerActive(this)) return
+            addChatMessage(message)
+        }
+    }
+
+    private fun addChatMessage(message: io.github.ts3mobile.protocol.ChatMessage) {
+        mutableState.update { current ->
+            val combined = current.chatMessages + message
+            current.copy(
+                chatMessages = if (combined.size > MAX_CHAT_MESSAGES) {
+                    combined.takeLast(MAX_CHAT_MESSAGES)
+                } else combined,
+                unreadChat = current.unreadChat + 1,
+            )
+        }
+    }
+
+    fun sendChannelChat(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        serviceScope.launch {
+            val result = runCatching {
+                sessionMutex.withLock { session?.sendChannelMessage(trimmed) }
+            }
+            result.onFailure { error ->
+                mutableState.update {
+                    it.copy(channelError = "Chat failed: ${error.conciseMessage()}")
+                }
+            }
+        }
+    }
+
+    fun sendServerChat(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.sendServerMessage(trimmed) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(channelError = "Failed to send message: ${error.conciseMessage()}")
+                    }
+                }
+        }
+    }
+
+    fun sendPrivateChat(clientId: Int, message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.sendPrivateMessage(clientId, trimmed) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(channelError = "Failed to send PM: ${error.conciseMessage()}")
+                    }
+                }
+        }
+    }
+
+    fun markChatRead() {
+        mutableState.update { it.copy(unreadChat = 0) }
     }
 
     private fun onSessionConnected(listener: SessionListener) {
@@ -414,7 +477,8 @@ class TeamSpeakService : Service() {
     private fun launchReconnect(cause: ConnectionStatus, epoch: Long) {
         if (!isEpochActive(epoch) || userDisconnectRequested) return
         val detail = if (networkAvailable.value) {
-            "连接中断，准备自动重连：${cause.detail.orEmpty()}".trimEnd('：')
+            "Connection lost, reconnecting automatically: ${cause.detail.orEmpty()}"
+                .trimEnd(':')
         } else {
             WAITING_FOR_NETWORK_DETAIL
         }
@@ -467,7 +531,7 @@ class TeamSpeakService : Service() {
                 current.copy(
                     status = ConnectionStatus(
                         ConnectionPhase.RECONNECTING,
-                        "${delayMs / 1_000} 秒后进行第 $attempt 次重连",
+                        "Reconnect attempt $attempt in ${delayMs / 1_000}s",
                         retryable = true,
                     ),
                 )
@@ -482,7 +546,7 @@ class TeamSpeakService : Service() {
                 current.copy(
                     status = ConnectionStatus(
                         ConnectionPhase.RECONNECTING,
-                        "正在进行第 $attempt 次重连",
+                        "Reconnect attempt $attempt in progress",
                         retryable = true,
                     ),
                 )
@@ -550,8 +614,9 @@ class TeamSpeakService : Service() {
         serviceScope.launch {
             try {
                 sessionMutex.withLock {
-                    check(isListenerActive(listener) && listener.connected) { "连接已失效" }
-                    session?.joinChannel(target.id, target.password) ?: error("连接已失效")
+                    check(isListenerActive(listener) && listener.connected) { "Connection is no longer active" }
+                    session?.joinChannel(target.id, target.password)
+                        ?: error("Connection is no longer active")
                 }
                 mutableState.update {
                     it.copy(switchingChannelId = null, channelError = null)
@@ -561,7 +626,7 @@ class TeamSpeakService : Service() {
                     mutableState.update {
                         it.copy(
                             switchingChannelId = null,
-                            channelError = "恢复频道失败：${error.conciseMessage()}",
+                            channelError = "Failed to restore channel: ${error.conciseMessage()}",
                         )
                     }
                 }
@@ -591,7 +656,7 @@ class TeamSpeakService : Service() {
                     listener,
                     ConnectionStatus(
                         ConnectionPhase.DISCONNECTED,
-                        "网络连接已断开",
+                        "Network connection lost",
                         retryable = true,
                     ),
                 )
@@ -656,7 +721,7 @@ class TeamSpeakService : Service() {
             !hasMicrophonePermission()
         ) {
             mutableState.update {
-                it.copy(microphoneError = "需要麦克风权限才能开启常开模式")
+                it.copy(microphoneError = "Microphone permission is required for continuous mode")
             }
             return
         }
@@ -692,7 +757,7 @@ class TeamSpeakService : Service() {
                     mutableState.update {
                         it.copy(
                             isTransmitting = false,
-                            microphoneError = "没有麦克风权限",
+                            microphoneError = "Microphone permission denied",
                         )
                     }
                     return@withLock
@@ -904,10 +969,10 @@ class TeamSpeakService : Service() {
             try {
                 sessionMutex.withLock {
                     check(mutableState.value.status.phase == ConnectionPhase.CONNECTED) {
-                        "当前未连接到服务器"
+                        "Not connected to a server"
                     }
                     session?.joinChannel(channelId, password)
-                        ?: error("当前未连接到服务器")
+                        ?: error("Not connected to a server")
                 }
                 lastChannel = ChannelTarget(channelId, password)
                 mutableState.update { state ->
@@ -917,8 +982,58 @@ class TeamSpeakService : Service() {
                 mutableState.update { state ->
                     state.copy(
                         switchingChannelId = null,
-                        channelError = "切换频道失败：${error.conciseMessage()}",
+                        channelError = "Failed to switch channel: ${error.conciseMessage()}",
                     )
+                }
+            }
+        }
+    }
+
+    private fun setInputMuted(muted: Boolean) {
+        if (mutableState.value.inputMuted == muted) return
+        mutableState.update { it.copy(inputMuted = muted) }
+        if (muted) pushToTalkPressed.set(false)
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.setInputMuted(muted) } }
+            reconcileMicrophone()
+            updateNotification()
+        }
+    }
+
+    private fun setOutputMuted(muted: Boolean) {
+        if (mutableState.value.outputMuted == muted) return
+        mutableState.update { it.copy(outputMuted = muted) }
+        audioPlayer.setMuted(muted)
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.setOutputMuted(muted) } }
+        }
+    }
+
+    private fun setAway(message: String?) {
+        val away = message != null
+        mutableState.update { it.copy(away = away, awayMessage = message.orEmpty()) }
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.setAway(message) } }
+        }
+    }
+
+    fun setMasterVolume(volume: Float) {
+        val normalized = volume.coerceIn(0f, 1f)
+        mutableState.update { it.copy(masterVolume = normalized) }
+        audioPlayer.setMasterVolume(normalized)
+    }
+
+    private fun setNickname(nickname: String) {
+        val trimmed = nickname.trim()
+        if (trimmed.length !in 2..30) return
+        if (mutableState.value.status.phase != ConnectionPhase.CONNECTED) return
+        serviceScope.launch {
+            try {
+                sessionMutex.withLock { session?.setNickname(trimmed) }
+                desiredConfig = desiredConfig?.copy(nickname = trimmed)
+            } catch (error: Throwable) {
+                mutableState.update {
+                    it.copy(channelError = "Failed to update nickname: ${error.conciseMessage()}")
                 }
             }
         }
@@ -961,12 +1076,30 @@ class TeamSpeakService : Service() {
             this@TeamSpeakService.joinChannel(channelId, password)
         }
 
+        fun setNickname(nickname: String) {
+            this@TeamSpeakService.setNickname(nickname)
+        }
+
+        fun setInputMuted(muted: Boolean) = this@TeamSpeakService.setInputMuted(muted)
+        fun setOutputMuted(muted: Boolean) = this@TeamSpeakService.setOutputMuted(muted)
+        fun setAway(message: String?) = this@TeamSpeakService.setAway(message)
+        fun sendChannelChat(message: String) = this@TeamSpeakService.sendChannelChat(message)
+        fun sendServerChat(message: String) = this@TeamSpeakService.sendServerChat(message)
+        fun markChatRead() = this@TeamSpeakService.markChatRead()
+        fun sendPrivateChat(clientId: Int, message: String) =
+            this@TeamSpeakService.sendPrivateChat(clientId, message)
+        fun startPrivateChatWith(clientId: Int) {
+            // open PM tab by sending a local zero-length marker? No-op for now;
+            // UI creates the conversation on first click.
+        }
+        fun setMasterVolume(volume: Float) = this@TeamSpeakService.setMasterVolume(volume)
+
         fun reportMicrophonePermissionDenied() {
             pushToTalkPressed.set(false)
             mutableState.update {
                 it.copy(
                     isTransmitting = false,
-                    microphoneError = "需要麦克风权限才能发送语音",
+                    microphoneError = "Microphone permission is required to send voice",
                 )
             }
         }
@@ -996,8 +1129,10 @@ class TeamSpeakService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "ts3_connection"
         private const val NOTIFICATION_ID = 4103
         private const val STABLE_CONNECTION_MS = 30_000L
-        private const val WAITING_FOR_NETWORK_DETAIL = "网络不可用，恢复后自动重连"
+        private const val WAITING_FOR_NETWORK_DETAIL =
+            "Network unavailable; will reconnect automatically when it returns"
         private const val MAX_PARTICIPANT_VOLUME_PERCENT = 200
+        private const val MAX_CHAT_MESSAGES = 200
         private val foregroundPhases = setOf(
             ConnectionPhase.CONNECTING,
             ConnectionPhase.RECONNECTING,

@@ -23,9 +23,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.ts3mobile.app.service.TeamSpeakService
 import io.github.ts3mobile.app.service.TeamSpeakServiceState
 import io.github.ts3mobile.app.service.MicrophoneMode
+import io.github.ts3mobile.protocol.ServerConfig
 import io.github.ts3mobile.app.ui.MainScreen
 import io.github.ts3mobile.app.ui.theme.Ts3MobileTheme
-import io.github.ts3mobile.protocol.ServerConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
@@ -77,14 +77,32 @@ class MainActivity : ComponentActivity() {
                 val serviceState by (serviceBinder?.state ?: fallbackState)
                     .collectAsStateWithLifecycle()
                 val form by viewModel.form.collectAsStateWithLifecycle()
+                val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
 
                 MainScreen(
                     form = form,
+                    bookmarks = bookmarks,
                     serviceState = serviceState,
                     onHostChanged = viewModel::setHost,
                     onPortChanged = viewModel::setPort,
                     onNicknameChanged = viewModel::setNickname,
                     onPasswordChanged = viewModel::setPassword,
+                    onDefaultChannelChanged = viewModel::setDefaultChannel,
+                    onSaveBookmark = viewModel::saveBookmark,
+                    onDeleteBookmark = viewModel::deleteBookmark,
+                    onApplyBookmark = { bookmark ->
+                        requestConnection(
+                            ServerConfig(
+                                host = bookmark.host,
+                                port = bookmark.port,
+                                nickname = bookmark.nickname.ifBlank {
+                                    viewModel.form.value.nickname
+                                },
+                                password = bookmark.password,
+                                defaultChannel = bookmark.defaultChannel,
+                            ),
+                        )
+                    },
                     onConnect = {
                         viewModel.submit()?.let(::requestConnection)
                     },
@@ -94,12 +112,6 @@ class MainActivity : ComponentActivity() {
                     onPlaybackMutedChange = { muted ->
                         serviceBinder?.setPlaybackMuted(muted)
                     },
-                    onParticipantMutedChange = { key, muted ->
-                        serviceBinder?.setParticipantMuted(key, muted)
-                    },
-                    onParticipantVolumeChange = { key, volumePercent ->
-                        serviceBinder?.setParticipantVolume(key, volumePercent)
-                    },
                     onAudioRouteSelected = { routeId ->
                         serviceBinder?.selectAudioRoute(routeId)
                     },
@@ -108,6 +120,18 @@ class MainActivity : ComponentActivity() {
                     onJoinChannel = { channelId, password ->
                         serviceBinder?.joinChannel(channelId, password)
                     },
+                    onUpdateNickname = { nickname ->
+                        viewModel.setNickname(nickname)
+                        viewModel.persistNickname()
+                        serviceBinder?.setNickname(nickname)
+                    },
+                    onSetInputMuted = { serviceBinder?.setInputMuted(it) },
+                    onSetOutputMuted = { serviceBinder?.setOutputMuted(it) },
+                    onSetAway = { serviceBinder?.setAway(it) },
+                    onSendChat = { serviceBinder?.sendChannelChat(it) },
+                    onSetMasterVolume = { serviceBinder?.setMasterVolume(it) },
+                    onChatOpened = { serviceBinder?.markChatRead() },
+                    onSendPm = { clientId, msg -> serviceBinder?.sendPrivateChat(clientId, msg) },
                 )
             }
         }
@@ -140,6 +164,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestConnection(config: ServerConfig) {
+        // Persist the chosen nickname for next launch.
+        viewModel.persistNickname()
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(

@@ -19,7 +19,7 @@ internal class NativeOpusEncoder : AutoCloseable {
     private companion object {
         const val SAMPLE_RATE = 48_000
         const val CHANNEL_COUNT = 1
-        const val BITRATE = 64_000
+        const val BITRATE = 48_000
         const val FRAME_SAMPLES = 960
 
         init {

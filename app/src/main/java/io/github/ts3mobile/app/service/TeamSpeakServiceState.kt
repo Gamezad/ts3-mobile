@@ -1,6 +1,7 @@
 package io.github.ts3mobile.app.service
 
 import io.github.ts3mobile.audio.opus.AudioRoutingState
+import io.github.ts3mobile.protocol.ChatMessage
 import io.github.ts3mobile.protocol.ConnectionStatus
 import io.github.ts3mobile.protocol.SessionSnapshot
 import io.github.ts3mobile.protocol.Ts3Participant
@@ -28,6 +29,10 @@ data class TeamSpeakServiceState(
     val serverLabel: String? = null,
     val identityReady: Boolean = false,
     val playbackMuted: Boolean = false,
+    val inputMuted: Boolean = false,
+    val outputMuted: Boolean = false,
+    val away: Boolean = false,
+    val awayMessage: String = "Away",
     val participantAudioSettings: Map<String, ParticipantAudioSettings> = emptyMap(),
     val microphoneMode: MicrophoneMode = MicrophoneMode.PUSH_TO_TALK,
     val isTransmitting: Boolean = false,
@@ -35,4 +40,7 @@ data class TeamSpeakServiceState(
     val switchingChannelId: Int? = null,
     val channelError: String? = null,
     val audioRouting: AudioRoutingState = AudioRoutingState.Default,
+    val masterVolume: Float = 1f,
+    val chatMessages: List<ChatMessage> = emptyList(),
+    val unreadChat: Int = 0,
 )

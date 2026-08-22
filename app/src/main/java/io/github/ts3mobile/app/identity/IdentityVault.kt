@@ -40,6 +40,13 @@ class IdentityVault(private val context: Context) {
         ).joinToString(":")
     }
 
+    suspend fun resetIdentity() {
+        val generated = Ts3IdentityCodec.generate()
+        context.identityDataStore.edit { preferences ->
+            preferences[encryptedIdentityKey] = encrypt(generated)
+        }
+    }
+
     private fun decrypt(payload: String): String {
         val parts = payload.split(':', limit = 3)
         require(parts.size == 3 && parts[0] == payloadVersion) { "Unsupported identity payload" }

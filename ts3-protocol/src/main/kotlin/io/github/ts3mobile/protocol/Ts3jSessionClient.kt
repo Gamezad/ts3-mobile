@@ -1,6 +1,5 @@
 package io.github.ts3mobile.protocol
 
-import com.github.manevolent.ts3j.command.CommandException
 import com.github.manevolent.ts3j.audio.Microphone
 import com.github.manevolent.ts3j.event.ChannelCreateEvent
 import com.github.manevolent.ts3j.event.ChannelDeletedEvent
@@ -13,13 +12,15 @@ import com.github.manevolent.ts3j.event.ClientMovedEvent
 import com.github.manevolent.ts3j.event.ClientUpdatedEvent
 import com.github.manevolent.ts3j.event.DisconnectedEvent
 import com.github.manevolent.ts3j.event.TS3Listener
+import com.github.manevolent.ts3j.event.TextMessageEvent
+import com.github.manevolent.ts3j.event.UnknownTeamspeakEvent
 import com.github.manevolent.ts3j.enums.CodecType
 import com.github.manevolent.ts3j.protocol.packet.PacketBody0Voice
 import com.github.manevolent.ts3j.protocol.packet.PacketBody1VoiceWhisper
 import com.github.manevolent.ts3j.protocol.PacketKind
 import com.github.manevolent.ts3j.protocol.socket.client.LocalTeamspeakClientSocket
+import com.github.manevolent.ts3j.protocol.socket.client.PatchedLocalTeamspeakClientSocket
 import java.io.IOException
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
@@ -27,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 class Ts3jSessionClient : Ts3SessionClient {
     private val generation = AtomicLong(0L)
+    @Volatile private var serverId: Int = 0
     private val snapshotStore = SessionSnapshotStore()
 
     @Volatile
@@ -54,13 +56,24 @@ class Ts3jSessionClient : Ts3SessionClient {
         emitStatus(token, ConnectionStatus(ConnectionPhase.CONNECTING))
 
         val identity = Ts3IdentityCodec.decode(identityMaterial)
-        val client = LocalTeamspeakClientSocket()
+        val client = PatchedLocalTeamspeakClientSocket()
         val asynchronousFailure = AtomicReference<Throwable?>(null)
         socket = client
 
         client.setIdentity(identity)
         client.setNickname(normalized.nickname)
         client.setHWID(identity.uid.toBase64())
+        if (normalized.defaultChannel.isNotBlank()) {
+            client.setOption("client.default_channel", normalized.defaultChannel)
+        }
+        // Advertise a real, supported TeamSpeak 3 client release. The library
+        // ships a placeholder ("3.?.?") that modern servers reject during the
+        // handshake, which previously manifested as a connection timeout.
+        client.setClientVersion(
+            CLIENT_PLATFORM,
+            CLIENT_VERSION_STRING,
+            CLIENT_VERSION_SIGN,
+        )
         client.setMicrophone(voiceSource?.toMicrophone())
         client.setExceptionHandler { error ->
             if (token == generation.get()) {
@@ -93,12 +106,16 @@ class Ts3jSessionClient : Ts3SessionClient {
         client.addListener(createListener(client, token))
 
         try {
-            val address = InetSocketAddress(
-                InetAddress.getByName(normalized.host),
-                normalized.port,
+            val password = normalized.password.takeIf(String::isNotBlank)
+            // Always resolve via our own SRV lookup. This avoids ts3j's
+            // TS3DNS abstraction that throws on missing records and that can
+            // fail on some Android networks, producing the generic
+            // "Problem establishing client connection" error.
+            val address = Ts3SrvLookup.resolve(normalized.host, normalized.port)
+            logDiagnostic(
+                "connecting to ${address.address?.hostAddress ?: address.hostName}:${address.port}",
             )
-            logDiagnostic("connecting to ${address.address.hostAddress}:${address.port}")
-            client.connect(address, normalized.password.takeIf(String::isNotBlank), CONNECT_TIMEOUT_MS)
+            client.connect(address, password, CONNECT_TIMEOUT_MS)
             if (token != generation.get()) {
                 runCatching { client.close() }
                 if (socket === client) socket = null
@@ -106,7 +123,10 @@ class Ts3jSessionClient : Ts3SessionClient {
             }
             try {
                 client.subscribeAll()
-            } catch (error: CommandException) {
+            } catch (error: Exception) {
+                // Some servers restrict channel subscriptions; without it the
+                // client is still connected, so log and continue rather than
+                // treating the session as failed.
                 logDiagnostic("event subscriptions unavailable: ${error.conciseMessage()}")
             }
             if (token != generation.get()) {
@@ -166,6 +186,154 @@ class Ts3jSessionClient : Ts3SessionClient {
             participant.copy(channelId = channelId)
         }
         publishSnapshot(generation.get())
+    }
+
+    override fun setNickname(nickname: String) {
+        val trimmed = nickname.trim()
+        require(trimmed.length in 2..30) { "Nickname must contain 2 to 30 characters" }
+        val current = socket?.takeIf { it.isConnected } ?: return
+        current.setNickname(trimmed)
+        snapshotStore.updateParticipants { participants ->
+            val selfId = current.clientId
+            participants.map { participant ->
+                if (participant.id == selfId) participant.copy(nickname = trimmed) else participant
+            }
+        }
+        publishSnapshot(generation.get())
+    }
+
+    override fun setInputMuted(muted: Boolean) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "clientupdate",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "client_input_muted",
+                if (muted) "1" else "0",
+            ),
+        )
+        runCatching { current.executeCommand(command) }
+        snapshotStore.updateParticipants { participants ->
+            val selfId = current.clientId
+            participants.map { p ->
+                if (p.id == selfId) p.copy(isInputMuted = muted) else p
+            }
+        }
+        publishSnapshot(generation.get())
+    }
+
+    override fun setOutputMuted(muted: Boolean) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "clientupdate",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "client_output_muted",
+                if (muted) "1" else "0",
+            ),
+        )
+        runCatching { current.executeCommand(command) }
+        snapshotStore.updateParticipants { participants ->
+            val selfId = current.clientId
+            participants.map { p ->
+                if (p.id == selfId) p.copy(isOutputMuted = muted) else p
+            }
+        }
+        publishSnapshot(generation.get())
+    }
+
+    override fun setAway(message: String?) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "clientupdate",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "client_away",
+                if (message == null) "0" else "1",
+            ),
+        )
+        if (message != null) {
+            command.add(
+                com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                    "client_away_message",
+                    message,
+                ),
+            )
+        }
+        runCatching { current.executeCommand(command) }
+    }
+
+    override fun sendChannelMessage(message: String) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val channelId = snapshotStore.snapshot().currentChannelId ?: return
+        runCatching { current.sendChannelMessage(channelId, message) }
+        val name = runCatching {
+            snapshotStore.snapshot().participants
+                .firstOrNull { it.id == current.clientId }?.nickname
+        }.getOrNull().orEmpty().ifBlank { "Me" }
+        listener?.onChatMessage(
+            ChatMessage(
+                author = name,
+                text = message,
+                target = ChatMessage.Target.CHANNEL,
+                isOwn = true,
+                channelId = channelId,
+            ),
+        )
+    }
+
+    override fun sendServerMessage(message: String) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "sendtextmessage",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("targetmode", "3"),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
+                "target",
+                serverId.toString(),
+            ),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("msg", message),
+        )
+        runCatching { current.executeCommand(command) }
+        emitOwnMessage(message, ChatMessage.Target.SERVER)
+    }
+
+    private fun emitOwnMessage(text: String, target: ChatMessage.Target) {
+        val name = runCatching {
+            snapshotStore.snapshot().participants
+                .firstOrNull { it.id == socket?.clientId }?.nickname
+        }.getOrNull().orEmpty().ifBlank { "Me" }
+        listener?.onChatMessage(
+            ChatMessage(
+                author = name,
+                text = text,
+                target = target,
+                isOwn = true,
+            ),
+        )
+    }
+
+
+    override fun sendPrivateMessage(clientId: Int, message: String) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "sendtextmessage",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("targetmode", "1"),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("target", clientId.toString()),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("msg", message),
+        )
+        runCatching { current.executeCommand(command) }
+        val name = snapshotStore.snapshot().participants.firstOrNull { it.id == current.clientId }?.nickname ?: "Me"
+        listener?.onChatMessage(
+            ChatMessage(
+                author = name,
+                text = message,
+                target = ChatMessage.Target.PRIVATE,
+                isOwn = true,
+                peerId = clientId,
+            ),
+        )
     }
 
     override fun close() {
@@ -245,6 +413,35 @@ class Ts3jSessionClient : Ts3SessionClient {
                 it.copy(parentId = event.channelParentId, orderAfterId = event.channelOrder)
             }
             publishSnapshotWhenConnected(client, token)
+        }
+
+        override fun onUnknownEvent(event: UnknownTeamspeakEvent) {
+            if (event.command.equals("initserver", ignoreCase = true)) {
+                event.getMap()["virtualserver_id"]?.toIntOrNull()?.let {
+                    serverId = it
+                }
+            }
+        }
+
+        override fun onTextMessage(event: TextMessageEvent) {
+            if (token != generation.get()) return
+            val targetMode = event.getMap()["targetmode"]?.toIntOrNull() ?: 1
+            val target = when (targetMode) {
+                3 -> ChatMessage.Target.SERVER
+                1 -> ChatMessage.Target.CHANNEL
+                else -> ChatMessage.Target.PRIVATE
+            }
+            val peerId = event.getMap()["target"]?.toIntOrNull()
+                ?.takeIf { target == ChatMessage.Target.PRIVATE }
+            val channelId = event.getMap()["cid"]?.toIntOrNull()
+            val message = ChatMessage(
+                author = event.invokerName.ifBlank { "Server" },
+                text = event.message,
+                target = target,
+                peerId = peerId,
+                channelId = channelId,
+            )
+            listener?.onChatMessage(message)
         }
     }
 
@@ -331,7 +528,7 @@ class Ts3jSessionClient : Ts3SessionClient {
         id = id,
         parentId = intValue("pid") ?: intValue("cpid") ?: 0,
         orderAfterId = intValue("channel_order") ?: 0,
-        name = get("channel_name").orEmpty(),
+        name = ChannelName.display(get("channel_name").orEmpty()),
         clientCount = 0,
         hasPassword = booleanValue("channel_flag_password") ?: false,
         isDefault = booleanValue("channel_flag_default") ?: false,
@@ -350,7 +547,7 @@ class Ts3jSessionClient : Ts3SessionClient {
     private fun Ts3Channel.withUpdates(values: Map<String, String>) = copy(
         parentId = values.intValue("pid") ?: values.intValue("cpid") ?: parentId,
         orderAfterId = values.intValue("channel_order") ?: orderAfterId,
-        name = values["channel_name"] ?: name,
+        name = values["channel_name"]?.let(ChannelName::display) ?: name,
         hasPassword = values.booleanValue("channel_flag_password") ?: hasPassword,
         isDefault = values.booleanValue("channel_flag_default") ?: isDefault,
     )
@@ -401,8 +598,18 @@ class Ts3jSessionClient : Ts3SessionClient {
     }
 
     private companion object {
-        const val CONNECT_TIMEOUT_MS = 10_000L
+        const val CONNECT_TIMEOUT_MS = 30_000L
+        const val DEFAULT_TEAMSPEAK_PORT = 9987
         const val REGULAR_CLIENT_TYPE = 0
+
+        // TeamSpeak 3.5.7 (Windows) client identity advertised during the
+        // clientinit handshake. Values come from the public ReSpeak/
+        // tsdeclarations version table.
+        const val CLIENT_PLATFORM = "Windows"
+        const val CLIENT_VERSION_STRING = "3.5.7 [Build: 1613066709]"
+        const val CLIENT_VERSION_SIGN =
+            "Md4ix51veF2pnYqgZLsLCDc+vyqkh7L/Zh+8FdnZLB1WwWZJSw0Esyq8IzMxLrIl/MjStvycGeYDvwDFRja2AQ=="
+
         val TERMINAL_DISCONNECT_REASONS = setOf(4, 5)
         val EMPTY_AUDIO_FRAME = ByteArray(0)
     }

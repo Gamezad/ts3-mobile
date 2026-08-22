@@ -2,10 +2,26 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- ColdTs Client: a snowflake on an icy rounded badge. -->
     <path
-        android:fillColor="#006D5B"
-        android:pathData="M12,2A9,9 0,0 0,3 11v7a3,3 0,0 0,3 3h3v-8H5v-2a7,7 0,0 1,14 0v2h-4v8h4v1h-6v2h6a2,2 0,0 0,2 -2V11a9,9 0,0 0,-9 -9z" />
+        android:fillColor="#0B6FA8"
+        android:pathData="M8,0h32a8,8 0,0 1,8 8v32a8,8 0,0 1,-8 8H8a8,8 0,0 1,-8 -8V8a8,8 0,0 1,8 -8z" />
+    <path
+        android:fillColor="#7CD0FF"
+        android:pathData="M24,8m-2.4,0a2.4,2.4 0,1 0,4.8 0a2.4,2.4 0,1 0,-4.8 0M24,40m-2.4,0a2.4,2.4 0,1 0,4.8 0a2.4,2.4 0,1 0,-4.8 0M8,24m-2.4,0a2.4,2.4 0,1 0,4.8 0a2.4,2.4 0,1 0,-4.8 0M40,24m-2.4,0a2.4,2.4 0,1 0,4.8 0a2.4,2.4 0,1 0,-4.8 0" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M24,10V38M12,17L36,31M36,17L12,31" />
+    <path
+        android:strokeColor="#CDE8FB"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M24,10l-3,4M24,10l3,4M24,38l-3,-4M24,38l3,-4M12,17l5,0l2,3M36,17l-5,0l-2,3M12,31l5,0l2,-3M36,31l-5,0l-2,-3" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,24m-3,0a3,3 0,1 0,6 0a3,3 0,1 0,-6 0" />
 </vector>
-
