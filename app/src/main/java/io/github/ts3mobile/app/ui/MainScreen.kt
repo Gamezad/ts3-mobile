@@ -547,6 +547,7 @@ private fun ConnectedContent(
     onSendChat: (String) -> Unit,
     onSetMasterVolume: (Float) -> Unit,
     onChatOpened: () -> Unit = {},
+    onSendPm: (Int, String) -> Unit = { _, _ -> },
 ) {
     var nicknameEditorOpen by rememberSaveable { mutableStateOf(false) }
     var pmPeerId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -628,7 +629,7 @@ private fun ConnectedContent(
             }
         }
 
-        ChannelList(state, onJoinChannel, onOpenPm, Modifier.weight(1f))
+        ChannelList(state, onJoinChannel, { pmPeerId = it }, Modifier.weight(1f))
 
         ChatPanel(
             messages = state.chatMessages,
@@ -1157,6 +1158,7 @@ private fun ChannelList(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChannelParticipantRow(
     p: Ts3Participant,
