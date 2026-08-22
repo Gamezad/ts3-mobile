@@ -478,7 +478,7 @@ class Ts3jSessionClient : Ts3SessionClient {
         id = id,
         parentId = intValue("pid") ?: intValue("cpid") ?: 0,
         orderAfterId = intValue("channel_order") ?: 0,
-        name = get("channel_name").orEmpty(),
+        name = ChannelName.display(get("channel_name").orEmpty()),
         clientCount = 0,
         hasPassword = booleanValue("channel_flag_password") ?: false,
         isDefault = booleanValue("channel_flag_default") ?: false,
@@ -497,7 +497,7 @@ class Ts3jSessionClient : Ts3SessionClient {
     private fun Ts3Channel.withUpdates(values: Map<String, String>) = copy(
         parentId = values.intValue("pid") ?: values.intValue("cpid") ?: parentId,
         orderAfterId = values.intValue("channel_order") ?: orderAfterId,
-        name = values["channel_name"] ?: name,
+        name = values["channel_name"]?.let(ChannelName::display) ?: name,
         hasPassword = values.booleanValue("channel_flag_password") ?: hasPassword,
         isDefault = values.booleanValue("channel_flag_default") ?: isDefault,
     )
