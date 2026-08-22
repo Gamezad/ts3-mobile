@@ -17,6 +17,7 @@ interface Ts3SessionClient : AutoCloseable {
     fun setAway(message: String?)
     fun sendChannelMessage(message: String)
     fun sendServerMessage(message: String)
+    fun sendPrivateMessage(clientId: Int, message: String)
     fun disconnect(reason: String = "Client disconnected")
     override fun close()
 }

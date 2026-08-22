@@ -416,6 +416,19 @@ class TeamSpeakService : Service() {
         }
     }
 
+    fun sendPrivateChat(clientId: Int, message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        serviceScope.launch {
+            runCatching { sessionMutex.withLock { session?.sendPrivateMessage(clientId, trimmed) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(channelError = "Failed to send PM: ${error.conciseMessage()}")
+                    }
+                }
+        }
+    }
+
     fun markChatRead() {
         mutableState.update { it.copy(unreadChat = 0) }
     }
@@ -1071,6 +1084,12 @@ class TeamSpeakService : Service() {
         fun sendChannelChat(message: String) = this@TeamSpeakService.sendChannelChat(message)
         fun sendServerChat(message: String) = this@TeamSpeakService.sendServerChat(message)
         fun markChatRead() = this@TeamSpeakService.markChatRead()
+        fun sendPrivateChat(clientId: Int, message: String) =
+            this@TeamSpeakService.sendPrivateChat(clientId, message)
+        fun startPrivateChatWith(clientId: Int) {
+            // open PM tab by sending a local zero-length marker? No-op for now;
+            // UI creates the conversation on first click.
+        }
         fun setMasterVolume(volume: Float) = this@TeamSpeakService.setMasterVolume(volume)
 
         fun reportMicrophonePermissionDenied() {

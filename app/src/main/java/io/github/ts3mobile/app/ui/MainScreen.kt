@@ -64,6 +64,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -147,8 +149,10 @@ fun MainScreen(
     onSendChat: (String) -> Unit,
     onSetMasterVolume: (Float) -> Unit,
     onChatOpened: () -> Unit = {},
+    onOpenPm: (Int) -> Unit = {},
+    onSendPm: (Int, String) -> Unit = { _, _ -> },
 ) {
-    Scaffold(
+    Scaffold
         topBar = {
             TopAppBar(
                 title = {
@@ -545,6 +549,27 @@ private fun ConnectedContent(
     onChatOpened: () -> Unit = {},
 ) {
     var nicknameEditorOpen by rememberSaveable { mutableStateOf(false) }
+    var pmPeerId by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    // If an inbound PM opens a peer, react
+    LaunchedEffect(state.chatMessages.size) {
+        state.chatMessages
+            .lastOrNull { it.target == io.github.ts3mobile.protocol.ChatMessage.Target.PRIVATE && !it.isOwn }
+            ?.let { if (pmPeerId == null && it.peerId != null) pmPeerId = it.peerId }
+    }
+
+    pmPeerId?.let { peerId ->
+        val peer = state.snapshot.participants.firstOrNull { it.id == peerId }
+        PrivateChatSheet(
+            peerName = peer?.nickname ?: "User $peerId",
+            messages = state.chatMessages.filter {
+                it.target == io.github.ts3mobile.protocol.ChatMessage.Target.PRIVATE &&
+                    ((it.isOwn && it.peerId == peerId) || (!it.isOwn && it.peerId == peerId))
+            },
+            onDismiss = { pmPeerId = null },
+            onSend = { onSendPm(peerId, it) },
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
         Surface(
@@ -603,7 +628,7 @@ private fun ConnectedContent(
             }
         }
 
-        ChannelList(state, onJoinChannel, Modifier.weight(1f))
+        ChannelList(state, onJoinChannel, onOpenPm, Modifier.weight(1f))
 
         ChatPanel(
             messages = state.chatMessages,
@@ -960,7 +985,12 @@ private fun PushToTalkButton(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, String) -> Unit, modifier: Modifier = Modifier) {
+private fun ChannelList(
+    state: TeamSpeakServiceState,
+    onJoinChannel: (Int, String) -> Unit,
+    onOpenPm: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var passwordChannel by remember { mutableStateOf<io.github.ts3mobile.protocol.Ts3Channel?>(null) }
     var channelPassword by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
@@ -1117,6 +1147,7 @@ private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, Strin
                             p,
                             isOwnClient = p.id == state.snapshot.ownClientId,
                             depth = row.depth,
+                            onClick = { if (p.id != state.snapshot.ownClientId) pmPeerId = p.id },
                         )
                     }
                 }
@@ -1127,11 +1158,17 @@ private fun ChannelList(state: TeamSpeakServiceState, onJoinChannel: (Int, Strin
 }
 
 @Composable
-private fun ChannelParticipantRow(p: Ts3Participant, isOwnClient: Boolean, depth: Int) {
+private fun ChannelParticipantRow(
+    p: Ts3Participant,
+    isOwnClient: Boolean,
+    depth: Int,
+    onClick: () -> Unit = {},
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .combinedClickable(onClick = onClick)
             .padding(
                 start = (48 + depth * 20).coerceAtMost(112).dp,
                 end = 16.dp,
@@ -1233,4 +1270,94 @@ private fun StatusMessage(phase: ConnectionPhase, detail: String, isError: Boole
         maxLines = 4,
         overflow = TextOverflow.Ellipsis,
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PrivateChatSheet(
+    peerName: String,
+    messages: List<io.github.ts3mobile.protocol.ChatMessage>,
+    onDismiss: () -> Unit,
+    onSend: (String) -> Unit,
+) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .height(420.dp)
+                .padding(horizontal = 12.dp),
+        ) {
+            Text(
+                peerName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.weight(1f)) {
+                if (messages.isEmpty()) {
+                    Text(
+                        "No private messages yet. Say hi 👋",
+                        Modifier.align(Alignment.Center),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(messages) { m ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (m.isOwn) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(Modifier.padding(10.dp)) {
+                                    Text(
+                                        if (m.isOwn) "You" else m.author,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(m.text, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.padding(bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text("Message $peerName") },
+                    shape = RoundedCornerShape(20.dp),
+                )
+                Button(
+                    onClick = {
+                        if (text.isNotBlank()) {
+                            onSend(text.trim())
+                            text = ""
+                        }
+                    },
+                    enabled = text.isNotBlank(),
+                    shape = CircleShape,
+                ) { Text("Send") }
+            }
+        }
+    }
 }

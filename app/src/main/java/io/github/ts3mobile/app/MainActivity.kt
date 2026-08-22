@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
                     onSendChat = { serviceBinder?.sendChannelChat(it) },
                     onSetMasterVolume = { serviceBinder?.setMasterVolume(it) },
                     onChatOpened = { serviceBinder?.markChatRead() },
+                    onSendPm = { clientId, msg -> serviceBinder?.sendPrivateChat(clientId, msg) },
                 )
             }
         }

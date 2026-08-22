@@ -13,6 +13,7 @@ import com.github.manevolent.ts3j.event.ClientUpdatedEvent
 import com.github.manevolent.ts3j.event.DisconnectedEvent
 import com.github.manevolent.ts3j.event.TS3Listener
 import com.github.manevolent.ts3j.event.TextMessageEvent
+import com.github.manevolent.ts3j.event.UnknownTeamspeakEvent
 import com.github.manevolent.ts3j.enums.CodecType
 import com.github.manevolent.ts3j.protocol.packet.PacketBody0Voice
 import com.github.manevolent.ts3j.protocol.packet.PacketBody1VoiceWhisper
@@ -27,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 class Ts3jSessionClient : Ts3SessionClient {
     private val generation = AtomicLong(0L)
+    @Volatile private var serverId: Int = 0
     private val snapshotStore = SessionSnapshotStore()
 
     @Volatile
@@ -276,7 +278,7 @@ class Ts3jSessionClient : Ts3SessionClient {
             com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("targetmode", "3"),
             com.github.manevolent.ts3j.command.parameter.CommandSingleParameter(
                 "target",
-                "0",
+                serverId.toString(),
             ),
             com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("msg", message),
         )
@@ -295,6 +297,29 @@ class Ts3jSessionClient : Ts3SessionClient {
                 text = text,
                 target = target,
                 isOwn = true,
+            ),
+        )
+    }
+
+
+    override fun sendPrivateMessage(clientId: Int, message: String) {
+        val current = socket?.takeIf { it.isConnected } ?: return
+        val command = com.github.manevolent.ts3j.command.SingleCommand(
+            "sendtextmessage",
+            com.github.manevolent.ts3j.protocol.ProtocolRole.CLIENT,
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("targetmode", "1"),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("target", clientId.toString()),
+            com.github.manevolent.ts3j.command.parameter.CommandSingleParameter("msg", message),
+        )
+        runCatching { current.executeCommand(command) }
+        val name = snapshotStore.snapshot().participants.firstOrNull { it.id == current.clientId }?.nickname ?: "Me"
+        listener?.onChatMessage(
+            ChatMessage(
+                author = name,
+                text = message,
+                target = ChatMessage.Target.PRIVATE,
+                isOwn = true,
+                peerId = clientId,
             ),
         )
     }
@@ -378,6 +403,14 @@ class Ts3jSessionClient : Ts3SessionClient {
             publishSnapshotWhenConnected(client, token)
         }
 
+        override fun onUnknownEvent(event: UnknownTeamspeakEvent) {
+            if (event.command.equals("initserver", ignoreCase = true)) {
+                event.getMap()["virtualserver_id"]?.toIntOrNull()?.let {
+                    serverId = it
+                }
+            }
+        }
+
         override fun onTextMessage(event: TextMessageEvent) {
             if (token != generation.get()) return
             val targetMode = event.getMap()["targetmode"]?.toIntOrNull() ?: 1
@@ -386,10 +419,13 @@ class Ts3jSessionClient : Ts3SessionClient {
                 1 -> ChatMessage.Target.CHANNEL
                 else -> ChatMessage.Target.PRIVATE
             }
+            val peerId = event.getMap()["target"]?.toIntOrNull()
+                ?.takeIf { target == ChatMessage.Target.PRIVATE }
             val message = ChatMessage(
                 author = event.invokerName.ifBlank { "Server" },
                 text = event.message,
                 target = target,
+                peerId = peerId,
             )
             listener?.onChatMessage(message)
         }
