@@ -1148,7 +1148,7 @@ private fun ChannelList(
                             p,
                             isOwnClient = p.id == state.snapshot.ownClientId,
                             depth = row.depth,
-                            onClick = { if (p.id != state.snapshot.ownClientId) pmPeerId = p.id },
+                            onClick = { if (p.id != state.snapshot.ownClientId) onOpenPm(p.id) },
                         )
                     }
                 }
