@@ -11,6 +11,7 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val isOwn: Boolean = false,
     val peerId: Int? = null,
+    val channelId: Int? = null,
 ) {
     enum class Target { CHANNEL, SERVER, PRIVATE }
 }

@@ -267,7 +267,19 @@ class Ts3jSessionClient : Ts3SessionClient {
         val current = socket?.takeIf { it.isConnected } ?: return
         val channelId = snapshotStore.snapshot().currentChannelId ?: return
         runCatching { current.sendChannelMessage(channelId, message) }
-        emitOwnMessage(message, ChatMessage.Target.CHANNEL)
+        val name = runCatching {
+            snapshotStore.snapshot().participants
+                .firstOrNull { it.id == current.clientId }?.nickname
+        }.getOrNull().orEmpty().ifBlank { "Me" }
+        listener?.onChatMessage(
+            ChatMessage(
+                author = name,
+                text = message,
+                target = ChatMessage.Target.CHANNEL,
+                isOwn = true,
+                channelId = channelId,
+            ),
+        )
     }
 
     override fun sendServerMessage(message: String) {
@@ -421,11 +433,13 @@ class Ts3jSessionClient : Ts3SessionClient {
             }
             val peerId = event.getMap()["target"]?.toIntOrNull()
                 ?.takeIf { target == ChatMessage.Target.PRIVATE }
+            val channelId = event.getMap()["cid"]?.toIntOrNull()
             val message = ChatMessage(
                 author = event.invokerName.ifBlank { "Server" },
                 text = event.message,
                 target = target,
                 peerId = peerId,
+                channelId = channelId,
             )
             listener?.onChatMessage(message)
         }

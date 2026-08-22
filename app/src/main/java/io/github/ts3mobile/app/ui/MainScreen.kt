@@ -631,9 +631,14 @@ private fun ConnectedContent(
 
         ChannelList(state, onJoinChannel, { pmPeerId = it }, Modifier.weight(1f))
 
+        val currentChannelId = state.snapshot.currentChannelId
+        val currentChannelName = state.snapshot.channels
+            .firstOrNull { it.id == currentChannelId }?.name ?: "Server"
         ChatPanel(
             messages = state.chatMessages,
             unread = state.unreadChat,
+            currentChannelId = currentChannelId,
+            currentChannelName = currentChannelName,
             onSend = onSendChat,
             onOpened = onChatOpened,
         )
@@ -713,6 +718,8 @@ private fun NicknameEditor(
 private fun ChatPanel(
     messages: List<ChatMessage>,
     unread: Int,
+    currentChannelId: Int?,
+    currentChannelName: String,
     onSend: (String) -> Unit,
     onOpened: () -> Unit,
 ) {
@@ -740,7 +747,7 @@ private fun ChatPanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (open) "Hide chat" else "Channel chat",
+                    if (open) "Hide chat" else "Chat: $currentChannelName",
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.weight(1f),
                 )
@@ -758,13 +765,17 @@ private fun ChatPanel(
             }
 
             if (open) {
+                val channelMessages = messages.filter {
+                    it.target != ChatMessage.Target.PRIVATE &&
+                        (it.channelId == null || it.channelId == currentChannelId)
+                }
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(220.dp)
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                 ) {
-                    if (messages.isEmpty()) {
+                    if (channelMessages.isEmpty()) {
                         Text(
                             "No messages yet.",
                             Modifier.align(Alignment.Center),
@@ -778,7 +789,7 @@ private fun ChatPanel(
                             contentPadding = PaddingValues(10.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            items(messages) { message ->
+                            items(channelMessages) { message ->
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
                                     color = if (message.isOwn)

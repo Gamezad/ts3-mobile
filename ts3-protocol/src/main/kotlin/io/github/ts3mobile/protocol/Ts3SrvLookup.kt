@@ -9,13 +9,6 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.concurrent.thread
 
-/**
- * TeamSpeak 3 endpoint resolution matching official client order:
- *  1. explicit port -> direct
- *  2. SRV `_ts3._udp.<host>`
- *  3. direct host:9987
- *  4. TSDNS query on TCP 41144 (returns "host:port" or "host")
- */
 internal object Ts3SrvLookup {
     private const val TS3_VOICE_DEFAULT_PORT = 9987
     private const val TSDNS_PORT = 41144
@@ -25,6 +18,11 @@ internal object Ts3SrvLookup {
         resolveSrv(host)?.let { return it }
         direct(host)?.let { return it }
         resolveTsDns(host)?.let { return it }
+        // TSDNS is commonly hosted on the parent domain but answers for the
+        // full hostname (e.g. ts.example.com -> example.com:41144).
+        parentDomain(host)?.let { parent ->
+            resolveTsDns(parent, query = host)?.let { return it }
+        }
         return InetSocketAddress(host, TS3_VOICE_DEFAULT_PORT)
     }
 
@@ -53,15 +51,15 @@ internal object Ts3SrvLookup {
             .firstOrNull { !it.isUnresolved }
     }
 
-    private fun resolveTsDns(host: String): InetSocketAddress? {
+    private fun resolveTsDns(tsdnsHost: String, query: String = tsdnsHost): InetSocketAddress? {
         var answer: InetSocketAddress? = null
         val t = thread(name = "tsdns", isDaemon = true) {
             runCatching {
                 Socket().use { socket ->
-                    socket.connect(InetSocketAddress(host, TSDNS_PORT), 2_000)
+                    socket.connect(InetSocketAddress(tsdnsHost, TSDNS_PORT), 2_000)
                     socket.soTimeout = 2_000
                     socket.getOutputStream().bufferedWriter().use { out ->
-                        out.write(host)
+                        out.write(query)
                         out.write("\r\n")
                         out.flush()
                     }
@@ -81,5 +79,11 @@ internal object Ts3SrvLookup {
         t.join(2_500)
         if (t.isAlive) t.interrupt()
         return answer?.takeIf { !it.isUnresolved }
+    }
+
+    private fun parentDomain(host: String): String? {
+        val parts = host.split('.').filter { it.isNotBlank() }
+        if (parts.size < 2) return null
+        return parts.drop(1).joinToString(".")
     }
 }
